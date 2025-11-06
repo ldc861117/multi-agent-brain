@@ -1,0 +1,61 @@
+version: 1
+
+environment:
+  path: .env
+
+network:
+  name: multi-agent-http
+  transport: http
+  settings:
+    host: 0.0.0.0
+    port: 8700
+    cors:
+      allow_origins:
+        - "*"
+      allow_credentials: true
+      allow_methods:
+        - "*"
+      allow_headers:
+        - "*"
+
+channels:
+  general:
+    description: "Entry point for user conversations and ad-hoc requests."
+    entrypoint: agents.general:GeneralAgent
+    visibility: public
+    targets:
+      - coordination
+
+  coordination:
+    description: "Routes work between specialists and maintains global context."
+    entrypoint: agents.coordination:CoordinationAgent
+    visibility: internal
+    targets:
+      - python_expert
+      - milvus_expert
+      - devops_expert
+
+  python_expert:
+    description: "Specialist for Python development assistance."
+    entrypoint: agents.python_expert:PythonExpertAgent
+    visibility: internal
+
+  milvus_expert:
+    description: "Vector database (Milvus) subject matter expert."
+    entrypoint: agents.milvus_expert:MilvusExpertAgent
+    visibility: internal
+
+  devops_expert:
+    description: "DevOps and infrastructure specialist."
+    entrypoint: agents.devops_expert:DevOpsExpertAgent
+    visibility: internal
+
+routing:
+  default_target: general
+  escalations:
+    general:
+      - coordination
+    coordination:
+      - python_expert
+      - milvus_expert
+      - devops_expert

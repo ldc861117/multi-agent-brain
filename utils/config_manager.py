@@ -86,11 +86,37 @@ class ConfigManager:
             self._agent_configs[agent_name] = global_config
             return global_config
         
-        # Apply overrides
+        # Apply overrides with environment variable precedence
+        # Environment variables should take precedence, but YAML overrides should work when env vars are not set
+        
+        # For chat model: check if environment variable is different from global default
+        chat_model = global_config.chat_api.model
+        if (chat_model == "gpt-3.5-turbo" and  # Using default
+            agent_override.get('chat_model') and 
+            agent_override.get('chat_model') != "gpt-3.5-turbo"):  # YAML has non-default
+            # No environment override, use YAML override
+            chat_model = agent_override.get('chat_model')
+        
+        # For embedding model: same logic
+        embedding_model = global_config.embedding_api.model
+        if (embedding_model == "text-embedding-3-small" and  # Using default
+            agent_override.get('embedding_model') and 
+            agent_override.get('embedding_model') != "text-embedding-3-small"):  # YAML has non-default
+            # No environment override, use YAML override
+            embedding_model = agent_override.get('embedding_model')
+            
+        # For embedding dimension: same logic
+        embedding_dimension = global_config.embedding_api.dimension
+        if (embedding_dimension == 1536 and  # Using default
+            agent_override.get('embedding_dimension') and 
+            agent_override.get('embedding_dimension') != 1536):  # YAML has non-default
+            # No environment override, use YAML override
+            embedding_dimension = agent_override.get('embedding_dimension')
+        
         chat_config = ChatAPIConfig(
             api_key=global_config.chat_api.api_key,
             base_url=global_config.chat_api.base_url,
-            model=agent_override.get('chat_model', global_config.chat_api.model),
+            model=chat_model,
             provider=global_config.chat_api.provider,
             timeout=global_config.chat_api.timeout,
             max_retries=global_config.chat_api.max_retries,
@@ -101,9 +127,9 @@ class ConfigManager:
         embedding_config = EmbeddingAPIConfig(
             api_key=global_config.embedding_api.api_key,
             base_url=global_config.embedding_api.base_url,
-            model=agent_override.get('embedding_model', global_config.embedding_api.model),
+            model=embedding_model,
             provider=global_config.embedding_api.provider,
-            dimension=agent_override.get('embedding_dimension', global_config.embedding_api.dimension),
+            dimension=embedding_dimension,
             timeout=global_config.embedding_api.timeout,
             max_retries=global_config.embedding_api.max_retries,
             retry_delay=global_config.embedding_api.retry_delay,

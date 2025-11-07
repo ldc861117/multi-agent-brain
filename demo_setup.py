@@ -7,7 +7,11 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from dotenv import load_dotenv
 from loguru import logger
+
+# Load environment variables at module import
+load_dotenv()
 
 
 class DemoEnvironmentError(Exception):

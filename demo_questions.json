@@ -1,0 +1,151 @@
+{
+  "questions": [
+    {
+      "id": 1,
+      "question": "如何用 Python 优化列表推导式的性能？",
+      "expected_expert": ["python_expert"],
+      "category": "python_optimization",
+      "difficulty": "medium",
+      "tags": ["python", "performance", "optimization"]
+    },
+    {
+      "id": 2,
+      "question": "Milvus 向量数据库如何处理高维向量搜索？",
+      "expected_expert": ["milvus_expert"],
+      "category": "milvus_performance",
+      "difficulty": "medium",
+      "tags": ["milvus", "vector_search", "high_dimensional"]
+    },
+    {
+      "id": 3,
+      "question": "如何在 Docker 中部署 multi-agent-brain 系统？",
+      "expected_expert": ["devops_expert"],
+      "category": "deployment",
+      "difficulty": "medium",
+      "tags": ["docker", "deployment", "devops"]
+    },
+    {
+      "id": 4,
+      "question": "使用 Python 和 Milvus 构建实时向量搜索系统的最佳实践是什么？",
+      "expected_expert": ["python_expert", "milvus_expert"],
+      "category": "integration",
+      "difficulty": "hard",
+      "tags": ["python", "milvus", "real_time", "best_practices"]
+    },
+    {
+      "id": 5,
+      "question": "如何监控和优化 multi-agent 系统的性能？",
+      "expected_expert": ["python_expert", "milvus_expert", "devops_expert"],
+      "category": "monitoring",
+      "difficulty": "hard",
+      "tags": ["monitoring", "performance", "optimization", "multi_agent"]
+    },
+    {
+      "id": 6,
+      "question": "Python 异步编程在处理大量并发请求时的优势是什么？",
+      "expected_expert": ["python_expert"],
+      "category": "python_async",
+      "difficulty": "medium",
+      "tags": ["python", "async", "concurrency"]
+    },
+    {
+      "id": 7,
+      "question": "Milvus 集群部署的配置参数有哪些关键设置？",
+      "expected_expert": ["milvus_expert"],
+      "category": "milvus_cluster",
+      "difficulty": "hard",
+      "tags": ["milvus", "cluster", "configuration"]
+    },
+    {
+      "id": 8,
+      "question": "如何使用 Kubernetes 部署和管理多智能体应用？",
+      "expected_expert": ["devops_expert"],
+      "category": "kubernetes",
+      "difficulty": "hard",
+      "tags": ["kubernetes", "devops", "containers", "orchestration"]
+    },
+    {
+      "id": 9,
+      "question": "Python 内存泄漏的常见原因和调试方法？",
+      "expected_expert": ["python_expert"],
+      "category": "python_debugging",
+      "difficulty": "medium",
+      "tags": ["python", "memory", "debugging", "performance"]
+    },
+    {
+      "id": 10,
+      "question": "向量数据库索引选择策略：HNSW vs IVF_FLAT vs PQ？",
+      "expected_expert": ["milvus_expert"],
+      "category": "vector_indexes",
+      "difficulty": "hard",
+      "tags": ["milvus", "indexes", "vector_database", "performance"]
+    },
+    {
+      "id": 11,
+      "question": "CI/CD 流水线中如何自动化测试和部署 Python 微服务？",
+      "expected_expert": ["devops_expert"],
+      "category": "cicd",
+      "difficulty": "medium",
+      "tags": ["cicd", "python", "microservices", "automation"]
+    },
+    {
+      "id": 12,
+      "question": "如何设计一个可扩展的 Python + Milvus 架构来处理每日百万级向量搜索？",
+      "expected_expert": ["python_expert", "milvus_expert"],
+      "category": "scalability",
+      "difficulty": "hard",
+      "tags": ["python", "milvus", "scalability", "architecture"]
+    },
+    {
+      "id": 13,
+      "question": "Python GIL 对多线程性能的影响及解决方案？",
+      "expected_expert": ["python_expert"],
+      "category": "python_gil",
+      "difficulty": "medium",
+      "tags": ["python", "gil", "multithreading", "performance"]
+    },
+    {
+      "id": 14,
+      "question": "Milvus 数据备份和灾难恢复的最佳实践？",
+      "expected_expert": ["milvus_expert"],
+      "category": "milvus_backup",
+      "difficulty": "medium",
+      "tags": ["milvus", "backup", "disaster_recovery", "data_management"]
+    },
+    {
+      "id": 15,
+      "question": "如何使用 Terraform 和 Ansible 自动化部署多智能体系统？",
+      "expected_expert": ["devops_expert"],
+      "category": "infrastructure_as_code",
+      "difficulty": "hard",
+      "tags": ["terraform", "ansible", "iac", "automation", "devops"]
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created": "2024-01-01T00:00:00Z",
+    "description": "Multi-Agent Brain DEMO 预定义问题集",
+    "categories": {
+      "python_optimization": "Python 性能优化相关问题",
+      "milvus_performance": "Milvus 性能和配置相关问题",
+      "deployment": "系统部署和运维相关问题",
+      "integration": "多技术栈集成相关问题",
+      "monitoring": "监控和性能优化相关问题",
+      "python_async": "Python 异步编程相关问题",
+      "milvus_cluster": "Milvus 集群部署相关问题",
+      "kubernetes": "Kubernetes 容器编排相关问题",
+      "python_debugging": "Python 调试和问题排查",
+      "vector_indexes": "向量数据库索引相关问题",
+      "cicd": "CI/CD 自动化相关问题",
+      "scalability": "系统可扩展性相关问题",
+      "python_gil": "Python GIL 和并发相关问题",
+      "milvus_backup": "Milvus 数据管理相关问题",
+      "infrastructure_as_code": "基础设施即代码相关问题"
+    },
+    "difficulty_levels": {
+      "easy": "基础问题，适合初学者",
+      "medium": "中等难度，需要一定经验",
+      "hard": "高难度，需要专业知识和经验"
+    }
+  }
+}

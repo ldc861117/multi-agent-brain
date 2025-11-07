@@ -3,6 +3,40 @@ version: 1
 environment:
   path: .env
 
+# API Configuration for chat and embedding services
+api_config:
+  # Global defaults for chat API
+  chat_api:
+    provider: "openai"  # openai, ollama, custom
+    model: "gpt-3.5-turbo"
+    timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+    max_retry_delay: 60.0
+  
+  # Global defaults for embedding API
+  embedding_api:
+    provider: "openai"  # openai, ollama, custom
+    model: "text-embedding-3-small"
+    dimension: 1536
+    timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+    max_retry_delay: 60.0
+  
+  # Per-agent model overrides (optional)
+  agent_overrides:
+    coordination:
+      chat_model: "gpt-4"
+      embedding_model: "text-embedding-3-large"
+      embedding_dimension: 3072
+    python_expert:
+      chat_model: "gpt-4"
+    milvus_expert:
+      chat_model: "gpt-3.5-turbo"
+    devops_expert:
+      chat_model: "gpt-3.5-turbo"
+
 network:
   name: multi-agent-http
   transport: http

@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import os
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 import openai
@@ -28,41 +30,176 @@ from openai.types.embedding import Embedding
 from pydantic import BaseModel, Field
 
 
+class ProviderType(str, Enum):
+    """Supported provider types for APIs."""
+    OPENAI = "openai"
+    OLLAMA = "ollama"
+    CUSTOM = "custom"
+
+
 @dataclass
-class OpenAIConfig:
-    """Configuration for OpenAI client wrapper."""
+class ChatAPIConfig:
+    """Configuration for chat completion API."""
     
     api_key: str
     base_url: Optional[str] = None
-    default_model: str = "gpt-3.5-turbo"
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dimension: int = 1536
+    model: str = "gpt-3.5-turbo"
+    provider: ProviderType = ProviderType.OPENAI
     timeout: int = 30
     max_retries: int = 3
     retry_delay: float = 1.0
     max_retry_delay: float = 60.0
     
     @classmethod
-    def from_env(cls) -> OpenAIConfig:
-        """Load configuration from environment variables."""
-        # Load .env file if it exists
+    def from_env(cls) -> ChatAPIConfig:
+        """Load chat API configuration from environment variables."""
         load_dotenv()
         
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("CHAT_API_KEY") or os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+            raise ValueError("CHAT_API_KEY or OPENAI_API_KEY environment variable is required")
+        
+        base_url = os.getenv("CHAT_API_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+        model = os.getenv("CHAT_API_MODEL") or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        provider_str = os.getenv("CHAT_API_PROVIDER", "openai")
+        
+        try:
+            provider = ProviderType(provider_str)
+        except ValueError:
+            logger.warning(f"Unknown provider '{provider_str}', defaulting to 'openai'")
+            provider = ProviderType.OPENAI
         
         return cls(
             api_key=api_key,
-            base_url=os.getenv("OPENAI_BASE_URL"),
-            default_model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"),
-            embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
-            embedding_dimension=int(os.getenv("EMBEDDING_DIMENSION", "1536")),
-            timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),
-            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),
-            retry_delay=float(os.getenv("OPENAI_RETRY_DELAY", "1.0")),
-            max_retry_delay=float(os.getenv("OPENAI_MAX_RETRY_DELAY", "60.0")),
+            base_url=base_url,
+            model=model,
+            provider=provider,
+            timeout=int(os.getenv("CHAT_API_TIMEOUT", "30")),
+            max_retries=int(os.getenv("CHAT_API_MAX_RETRIES", "3")),
+            retry_delay=float(os.getenv("CHAT_API_RETRY_DELAY", "1.0")),
+            max_retry_delay=float(os.getenv("CHAT_API_MAX_RETRY_DELAY", "60.0")),
         )
+
+
+@dataclass
+class EmbeddingAPIConfig:
+    """Configuration for embedding API."""
+    
+    api_key: Optional[str] = None  # Optional for local providers like Ollama
+    base_url: Optional[str] = None
+    model: str = "text-embedding-3-small"
+    provider: ProviderType = ProviderType.OPENAI
+    dimension: int = 1536
+    timeout: int = 30
+    max_retries: int = 3
+    retry_delay: float = 1.0
+    max_retry_delay: float = 60.0
+    
+    @classmethod
+    def from_env(cls) -> EmbeddingAPIConfig:
+        """Load embedding API configuration from environment variables."""
+        load_dotenv()
+        
+        api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("EMBEDDING_API_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+        model = os.getenv("EMBEDDING_API_MODEL") or os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+        provider_str = os.getenv("EMBEDDING_API_PROVIDER", "openai")
+        
+        try:
+            provider = ProviderType(provider_str)
+        except ValueError:
+            logger.warning(f"Unknown provider '{provider_str}', defaulting to 'openai'")
+            provider = ProviderType.OPENAI
+        
+        # Set default dimensions based on model
+        dimension = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
+        if dimension == 1536 and model.endswith("-large"):
+            dimension = 3072
+        elif dimension == 3072 and model.endswith("-small"):
+            dimension = 1536
+        
+        return cls(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            provider=provider,
+            dimension=dimension,
+            timeout=int(os.getenv("EMBEDDING_API_TIMEOUT", "30")),
+            max_retries=int(os.getenv("EMBEDDING_API_MAX_RETRIES", "3")),
+            retry_delay=float(os.getenv("EMBEDDING_API_RETRY_DELAY", "1.0")),
+            max_retry_delay=float(os.getenv("EMBEDDING_API_MAX_RETRY_DELAY", "60.0")),
+        )
+
+
+@dataclass
+class OpenAIConfig:
+    """Configuration for OpenAI client wrapper with separate chat and embedding APIs."""
+    
+    chat_api: ChatAPIConfig = field(default_factory=ChatAPIConfig.from_env)
+    embedding_api: EmbeddingAPIConfig = field(default_factory=EmbeddingAPIConfig.from_env)
+    
+    @classmethod
+    def from_env(cls) -> OpenAIConfig:
+        """Load configuration from environment variables."""
+        return cls(
+            chat_api=ChatAPIConfig.from_env(),
+            embedding_api=EmbeddingAPIConfig.from_env(),
+        )
+    
+    @classmethod
+    def from_env_with_fallback(cls) -> OpenAIConfig:
+        """Load configuration with fallback for embedding API to chat API."""
+        chat_config = ChatAPIConfig.from_env()
+        
+        # Try to load embedding config
+        try:
+            embedding_config = EmbeddingAPIConfig.from_env()
+            # If embedding API key is None but chat API key exists, fallback
+            if embedding_config.api_key is None and chat_config.api_key:
+                logger.info("Embedding API key not set, falling back to chat API key")
+                embedding_config.api_key = chat_config.api_key
+            # If embedding base URL is None but chat base URL exists, fallback
+            if embedding_config.base_url is None and chat_config.base_url:
+                logger.info("Embedding API base URL not set, falling back to chat API base URL")
+                embedding_config.base_url = chat_config.base_url
+        except Exception as e:
+            logger.warning(f"Failed to load embedding API config, falling back to chat API: {e}")
+            # Fallback to chat API settings
+            embedding_config = EmbeddingAPIConfig(
+                api_key=chat_config.api_key,
+                base_url=chat_config.base_url,
+                provider=chat_config.provider,
+                timeout=chat_config.timeout,
+                max_retries=chat_config.max_retries,
+                retry_delay=chat_config.retry_delay,
+                max_retry_delay=chat_config.max_retry_delay,
+            )
+        
+        return cls(
+            chat_api=chat_config,
+            embedding_api=embedding_config,
+        )
+    
+    # Legacy properties for backward compatibility
+    @property
+    def api_key(self) -> str:
+        return self.chat_api.api_key
+    
+    @property
+    def base_url(self) -> Optional[str]:
+        return self.chat_api.base_url
+    
+    @property
+    def default_model(self) -> str:
+        return self.chat_api.model
+    
+    @property
+    def embedding_model(self) -> str:
+        return self.embedding_api.model
+    
+    @property
+    def embedding_dimension(self) -> int:
+        return self.embedding_api.dimension
 
 
 class ChatMessage(BaseModel):
@@ -90,37 +227,63 @@ class OpenAIClientWrapper:
         Parameters
         ----------
         config:
-            Optional configuration. If not provided, loads from environment.
+            Optional configuration. If not provided, loads from environment with fallback.
         """
-        self.config = config or OpenAIConfig.from_env()
-        self._client: Optional[OpenAI] = None
+        self.config = config or OpenAIConfig.from_env_with_fallback()
+        self._chat_client: Optional[OpenAI] = None
+        self._embedding_client: Optional[OpenAI] = None
         
         logger.info(
             "OpenAI client wrapper initialized",
             extra={
-                "base_url": self.config.base_url or "default",
-                "default_model": self.config.default_model,
-                "embedding_model": self.config.embedding_model,
+                "chat_base_url": self.config.chat_api.base_url or "default",
+                "chat_model": self.config.chat_api.model,
+                "embedding_base_url": self.config.embedding_api.base_url or "default",
+                "embedding_model": self.config.embedding_api.model,
+                "embedding_provider": self.config.embedding_api.provider.value,
             }
         )
     
     @property
-    def client(self) -> OpenAI:
-        """Get or create the OpenAI client instance."""
-        if self._client is None:
+    def chat_client(self) -> OpenAI:
+        """Get or create the chat API client instance."""
+        if self._chat_client is None:
             client_kwargs = {
-                "api_key": self.config.api_key,
-                "timeout": self.config.timeout,
+                "api_key": self.config.chat_api.api_key,
+                "timeout": self.config.chat_api.timeout,
                 "max_retries": 0,  # We handle retries ourselves
             }
             
-            if self.config.base_url:
-                client_kwargs["base_url"] = self.config.base_url
+            if self.config.chat_api.base_url:
+                client_kwargs["base_url"] = self.config.chat_api.base_url
             
-            self._client = OpenAI(**client_kwargs)
-            logger.debug("OpenAI client created")
+            self._chat_client = OpenAI(**client_kwargs)
+            logger.debug("Chat API client created")
         
-        return self._client
+        return self._chat_client
+    
+    @property
+    def embedding_client(self) -> OpenAI:
+        """Get or create the embedding API client instance."""
+        if self._embedding_client is None:
+            client_kwargs = {
+                "api_key": self.config.embedding_api.api_key or "dummy-key-for-local",
+                "timeout": self.config.embedding_api.timeout,
+                "max_retries": 0,  # We handle retries ourselves
+            }
+            
+            if self.config.embedding_api.base_url:
+                client_kwargs["base_url"] = self.config.embedding_api.base_url
+            
+            self._embedding_client = OpenAI(**client_kwargs)
+            logger.debug("Embedding API client created")
+        
+        return self._embedding_client
+    
+    @property
+    def client(self) -> OpenAI:
+        """Legacy property for backward compatibility. Returns chat client."""
+        return self.chat_client
     
     def _retry_with_backoff(self, func, *args, **kwargs):
         """Execute function with exponential backoff retry logic.
@@ -142,9 +305,14 @@ class OpenAIClientWrapper:
         OpenAIError
             If all retries are exhausted
         """
+        # Determine which config to use for retry settings based on the function
+        config = self.config.chat_api
+        if hasattr(func, '__self__') and func.__self__ == self._embedding_client:
+            config = self.config.embedding_api
+        
         last_error = None
         
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(config.max_retries + 1):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
@@ -158,16 +326,16 @@ class OpenAIClientWrapper:
                     logger.error("Resource not found, not retrying", extra={"error": str(e)})
                     raise OpenAIError(f"Resource not found: {e}", e)
                 
-                if attempt < self.config.max_retries:
+                if attempt < config.max_retries:
                     delay = min(
-                        self.config.retry_delay * (2 ** attempt),
-                        self.config.max_retry_delay
+                        config.retry_delay * (2 ** attempt),
+                        config.max_retry_delay
                     )
                     logger.warning(
                         f"Attempt {attempt + 1} failed, retrying in {delay:.2f}s",
                         extra={
                             "attempt": attempt + 1,
-                            "max_retries": self.config.max_retries + 1,
+                            "max_retries": config.max_retries + 1,
                             "error": str(e),
                             "retry_delay": delay,
                         }
@@ -231,7 +399,7 @@ class OpenAIClientWrapper:
         
         # Prepare request parameters
         request_params = {
-            "model": model or self.config.default_model,
+            "model": model or self.config.chat_api.model,
             "messages": messages,
             "temperature": temperature,
         }
@@ -254,7 +422,7 @@ class OpenAIClientWrapper:
         
         try:
             result = self._retry_with_backoff(
-                self.client.chat.completions.create,
+                self.chat_client.chat.completions.create,
                 **request_params
             )
             
@@ -317,7 +485,7 @@ class OpenAIClientWrapper:
             if not isinstance(text, str) or not text.strip():
                 raise OpenAIError(f"Invalid text at index {i}: {text}")
         
-        model = model_override or self.config.embedding_model
+        model = model_override or self.config.embedding_api.model
         
         logger.info(
             "Requesting embeddings",
@@ -330,7 +498,7 @@ class OpenAIClientWrapper:
         
         try:
             result = self._retry_with_backoff(
-                self.client.embeddings.create,
+                self.embedding_client.embeddings.create,
                 model=model,
                 input=texts,
                 **kwargs
@@ -404,9 +572,46 @@ class OpenAIClientWrapper:
                 messages=[{"role": "user", "content": "test"}],
                 max_tokens=1
             )
+            
+            # Test embedding connectivity (if different endpoint)
+            if (self.config.embedding_api.base_url and 
+                self.config.embedding_api.base_url != self.config.chat_api.base_url):
+                self.get_embedding_vector("test")
+            
             return True
         except Exception as e:
             raise OpenAIError(f"Configuration validation failed: {e}", e)
+    
+    def get_embeddings_batch(self, texts: List[str], **kwargs) -> List[Embedding]:
+        """Batch embeddings with optimized processing.
+        
+        This method handles batching for large lists of texts to optimize API calls.
+        
+        Parameters
+        ----------
+        texts:
+            List of texts to embed.
+        **kwargs:
+            Additional parameters to pass to the embedding API.
+            
+        Returns
+        -------
+        List[Embedding]
+            List of embedding objects.
+        """
+        if not texts:
+            return []
+        
+        # Process in batches to avoid hitting API limits
+        batch_size = 100  # Adjust based on provider limits
+        all_embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            batch_embeddings = self.get_embedding(batch, **kwargs)
+            all_embeddings.extend(batch_embeddings)
+        
+        return all_embeddings
 
 
 # Global instance for easy access

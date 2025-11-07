@@ -23,7 +23,7 @@
 - 主要语言: Python 3.11+
 ```
 
-## 2. Build & Run 指令（完全自动化）
+## 3. Build & Run 指令（完全自动化）
 
 ```bash
 # 环境检查
@@ -33,15 +33,9 @@ python --version  # 需要 3.11+
 pip install -r requirements.txt
 
 # 2. 配置环境
-# 创建 .env 文件（如果没有 .env.example）
-cat > .env << EOF
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-3.5-turbo
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSION=1536
-MILVUS_URI=./multi_agent_memory.db
-EOF
+# 复制 .env.example 到 .env 并配置
+cp .env.example .env
+# 编辑 .env 文件，配置你的 API 密钥和端点
 
 # 3. 启动 OpenAgents 网络
 openagents network http --config config.yaml  # 后台运行或新终端
@@ -56,34 +50,40 @@ curl http://localhost:8700/health
 http://localhost:8050
 ```
 
-## 3. 文件导航快速查询表
+## 4. 文件导航快速查询表
 
-**格式：任务 → 文件 → 主要方法 → Codemap 章节**
+**格式：任务 → 文件 → 主要方法 → 注意事项**
 
-| 任务 | 文件 | 方法/类 | 注意事项 | Codemap |
-|------|------|--------|---------|---------|
-| 添加新 Agent | `agents/my_expert/agent.py` | `class MyExpertAgent(BaseAgent)` | 继承 BaseAgent，实现 handle_message() | 2.3-2.4 |
-| 修改 LLM 调用 | `utils/openai_client.py` | `get_chat_completion()` | 所有 Agent 必须使用这个，不要直接用 openai.OpenAI() | 2.1 |
-| 生成 Embedding | `utils/openai_client.py` | `get_embedding()` / `get_embedding_vector()` | 自动支持自定义 base_url | 2.1 |
-| 存储知识 | `agents/shared_memory.py` | `store_knowledge()` | 需传入 tenant_id 做多租户隔离 | 2.2 |
-| 搜索知识 | `agents/shared_memory.py` | `search_knowledge()` | 返回相似度排序的结果列表 | 2.2 |
-| 批量操作 | `agents/shared_memory.py` | `batch_store/search_knowledge()` | 性能优化，处理 >10 条记录 | 2.2 |
-| 配置 LLM 端点 | `.env` | `OPENAI_BASE_URL` | 支持 OpenAI/DeepSeek/Moonshot/本地LLM | 5 |
-| 添加消息频道 | `config.yaml` | `channels` 部分 | 新 channel 需在此注册 | 2.5 |
-| 注册新 Agent | `config.yaml` | `channels` 部分 | 定义 entrypoint 路径 | 2.5 |
-| 启动 Agent 实例 | `agents/my_expert/agent.py` | `MyExpertAgent()` | 创建实例并调用 handle_message() | 待实现 |
+| 任务 | 文件 | 方法/类 | 注意事项 |
+|------|------|--------|---------|
+| 添加新 Agent | `agents/my_expert/agent.py` | `class MyExpertAgent(BaseAgent)` | 继承 BaseAgent，实现 handle_message() |
+| 修改 LLM 调用 | `utils/openai_client.py` | `OpenAIClientWrapper.get_chat_completion()` | 支持分离的 chat 和 embedding 端点 |
+| 生成 Embedding | `utils/openai_client.py` | `OpenAIClientWrapper.get_embedding_vector()` | 自动支持自定义 base_url 和 provider |
+| 存储知识 | `agents/shared_memory.py` | `SharedMemory.store_knowledge()` | 需传入 tenant_id 做多租户隔离 |
+| 搜索知识 | `agents/shared_memory.py` | `SharedMemory.search_knowledge()` | 返回相似度排序的结果列表 |
+| 批量操作 | `agents/shared_memory.py` | `batch_store/search_knowledge()` | 性能优化，处理 >10 条记录 |
+| 配置 Chat API | `.env` | `CHAT_API_*` 变量 | 支持 OpenAI/DeepSeek/Moonshot/本地LLM |
+| 配置 Embedding API | `.env` | `EMBEDDING_API_*` 变量 | 可独立配置，支持 Ollama 等本地服务 |
+| Agent 模型覆盖 | `config.yaml` | `api_config.agent_overrides` | per-agent 模型和维度配置 |
+| 添加消息频道 | `config.yaml` | `channels` 部分 | 新 channel 需在此注册 |
+| 配置管理 | `utils/config_manager.py` | `ConfigManager.get_agent_config()` | 支持环境变量 + YAML 配置 |
+| 启动 Agent 实例 | `agents/my_expert/agent.py` | `MyExpertAgent()` | 创建实例并调用 handle_message() |
 
-## 4. 核心 API 速查表
+## 5. 核心 API 速查表
 
 **复制即用的代码片段**
 
-### 4.1 获取 OpenAI 客户端
+### 5.1 获取 OpenAI 客户端
 
 ```python
-from utils import get_openai_client
+from utils import get_openai_client, get_agent_config, OpenAIClientWrapper
 
-# 获取全局单例（自动加载 .env 配置）
+# 获取全局客户端（默认配置）
 client = get_openai_client()
+
+# 获取特定 Agent 配置的客户端
+agent_config = get_agent_config("coordination")
+client = OpenAIClientWrapper(config=agent_config)
 
 # 聊天补全
 response = client.get_chat_completion(
@@ -107,13 +107,16 @@ for emb in embeddings:
     print(f"Dimension: {len(emb.embedding)}")
 ```
 
-### 4.2 操作共享记忆
+### 5.2 操作共享记忆
 
 ```python
 from agents.shared_memory import SharedMemory
 
-# 初始化
+# 初始化（使用默认配置）
 memory = SharedMemory()
+
+# 初始化（使用特定 Agent 配置）
+memory = SharedMemory(agent_name="coordination")
 
 # 存储知识
 doc_id = memory.store_knowledge(
@@ -167,11 +170,11 @@ print(health)  # {"milvus_connected": true, "collections": {...}}
 deleted_count = memory.delete_by_tenant("expert_knowledge", "project_a")
 ```
 
-### 4.3 创建新 Agent
+### 5.3 创建新 Agent
 
 ```python
 from agents.base import BaseAgent, AgentResponse
-from utils import get_openai_client
+from utils import get_agent_config, OpenAIClientWrapper
 from agents.shared_memory import SharedMemory
 from loguru import logger
 from typing import Any, Mapping, MutableMapping, Optional
@@ -181,8 +184,13 @@ class MyExpertAgent(BaseAgent):
         super().__init__()
         self.name = "my_expert"
         self.description = "My custom expert agent"
-        self.client = get_openai_client()
-        self.memory = SharedMemory()
+        
+        # 获取 Agent 特定配置
+        agent_config = get_agent_config(self.name)
+        self.client = OpenAIClientWrapper(config=agent_config)
+        
+        # 使用 Agent 特定配置初始化共享记忆
+        self.memory = SharedMemory(agent_name=self.name)
     
     async def handle_message(
         self,
@@ -232,9 +240,9 @@ class MyExpertAgent(BaseAgent):
         return AgentResponse(content=answer)
 ```
 
-## 5. 常见开发任务（决策树）
+## 6. 常见开发任务（决策树）
 
-### 5.1 我想添加一个新的 Expert Agent
+### 6.1 我想添加一个新的 Expert Agent
 
 ```
 步骤 1: 在 agents/ 目录创建文件夹
@@ -270,29 +278,31 @@ class MyExpertAgent(BaseAgent):
 Codemap: 2.3-2.4
 ```
 
-### 5.2 我想修改 LLM 端点（OpenAI → DeepSeek）
+### 6.2 我想修改 LLM 端点（OpenAI → DeepSeek）
 
 ```
 步骤 1: 编辑 .env 文件
-  改: OPENAI_API_KEY=your_openai_key
-  为: OPENAI_API_KEY=your_deepseek_key
+  改: CHAT_API_KEY=your_openai_key
+  为: CHAT_API_KEY=your_deepseek_key
   
-  改: OPENAI_BASE_URL=https://api.openai.com/v1
-  为: OPENAI_BASE_URL=https://api.deepseek.com/v1
+  改: CHAT_API_BASE_URL=https://api.openai.com/v1
+  为: CHAT_API_BASE_URL=https://api.deepseek.com/v1
+  
+  改: CHAT_API_MODEL=gpt-3.5-turbo
+  为: CHAT_API_MODEL=deepseek-chat
   
 步骤 2: 修改模型名称（可选）
-  改: OPENAI_MODEL=gpt-3.5-turbo
-  为: OPENAI_MODEL=deepseek-chat
+  改: CHAT_API_MODEL=gpt-3.5-turbo
+  为: CHAT_API_MODEL=deepseek-chat
   
 步骤 3: 无需改代码！
   utils/openai_client.py 会自动加载 .env 配置
   所有 Agent 会自动使用新端点
-  
+
 验证: 调用任何 Agent，查看日志确认使用的端点
-Codemap: 2.1, 5
 ```
 
-### 5.3 我想扩展知识库（添加新 Collection）
+### 6.3 我想扩展知识库（添加新 Collection）
 
 ```
 步骤 1: 在 shared_memory.py 中定义新集合
@@ -327,11 +337,9 @@ Codemap: 2.1, 5
   
 步骤 4: 测试
   创建 → 存储 → 搜索 → 验证结果
-  
-Codemap: 2.2
 ```
 
-### 5.4 我想使用本地 LLM（Ollama）
+### 6.4 我想使用本地 LLM（Ollama）
 
 ```
 步骤 1: 启动 Ollama
@@ -339,21 +347,27 @@ Codemap: 2.2
   ollama pull qwen2:7b  # 或其他模型
   
 步骤 2: 编辑 .env
-  OPENAI_API_KEY=ollama  # 占位符
-  OPENAI_BASE_URL=http://localhost:11434/v1
-  OPENAI_MODEL=qwen2:7b
+  CHAT_API_KEY=ollama  # 占位符
+  CHAT_API_BASE_URL=http://localhost:11434/v1
+  CHAT_API_MODEL=qwen2:7b
+  CHAT_API_PROVIDER=ollama
+  
+  EMBEDDING_API_KEY=ollama
+  EMBEDDING_API_BASE_URL=http://localhost:11434/v1
+  EMBEDDING_API_MODEL=nomic-embed-text
+  EMBEDDING_API_PROVIDER=ollama
+  EMBEDDING_DIMENSION=768
   
 步骤 3: 验证连接
   curl http://localhost:11434/v1/models
   
 步骤 4: 启动系统
   openagents network http --config config.yaml
-  
+
 注意: 本地 LLM 可能较慢，调整 timeout
-Codemap: 2.1, 5
 ```
 
-### 5.5 我想优化性能（缓存命中率）
+### 6.5 我想优化性能（缓存命中率）
 
 ```
 问题: 频繁调用 get_embedding()，成本和延迟高
@@ -371,7 +385,6 @@ Codemap: 2.1, 5
   SharedMemory(cache_size=2000)  # 增大缓存
   
 目标: cache_hit_ratio > 70%
-Codemap: 2.2
 ```
 
 ## 6. 代码约定（必须遵守）
@@ -578,19 +591,38 @@ logger.info("Performance metrics", extra={**cache_metrics, **search_metrics, **a
 ### 10.1 环境变量（.env）
 
 ```ini
-# 必填
-OPENAI_API_KEY=sk-xxx
+# Chat API 配置（必需）
+CHAT_API_KEY=sk-xxx
 
 # 可选，但推荐配置
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-3.5-turbo
-EMBEDDING_MODEL=text-embedding-3-small
+CHAT_API_BASE_URL=https://api.openai.com/v1
+CHAT_API_MODEL=gpt-3.5-turbo
+CHAT_API_PROVIDER=openai
+CHAT_API_TIMEOUT=30
+CHAT_API_MAX_RETRIES=3
+CHAT_API_RETRY_DELAY=1.0
+CHAT_API_MAX_RETRY_DELAY=60.0
+
+# Embedding API 配置（可选）
+EMBEDDING_API_KEY=sk-xxx  # 可为空，用于本地服务
+EMBEDDING_API_BASE_URL=https://api.openai.com/v1
+EMBEDDING_API_MODEL=text-embedding-3-small
+EMBEDDING_API_PROVIDER=openai
 EMBEDDING_DIMENSION=1536
+EMBEDDING_API_TIMEOUT=30
+EMBEDDING_API_MAX_RETRIES=3
+EMBEDDING_API_RETRY_DELAY=1.0
+EMBEDDING_API_MAX_RETRY_DELAY=60.0
 
 # Milvus
 MILVUS_URI=./multi_agent_memory.db
 
-# 高级配置
+# 兼容性配置（向后兼容）
+OPENAI_API_KEY=sk-xxx
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-3.5-turbo
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSION=1536
 OPENAI_TIMEOUT=30
 OPENAI_MAX_RETRIES=3
 OPENAI_RETRY_DELAY=1.0
@@ -600,6 +632,40 @@ OPENAI_MAX_RETRY_DELAY=60.0
 ### 10.2 网络配置（config.yaml）
 
 ```yaml
+# API 配置
+api_config:
+  # 全局默认 Chat API
+  chat_api:
+    provider: "openai"  # openai, ollama, custom
+    model: "gpt-3.5-turbo"
+    timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+    max_retry_delay: 60.0
+  
+  # 全局默认 Embedding API
+  embedding_api:
+    provider: "openai"  # openai, ollama, custom
+    model: "text-embedding-3-small"
+    dimension: 1536
+    timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+    max_retry_delay: 60.0
+  
+  # Agent 特定覆盖（可选）
+  agent_overrides:
+    coordination:
+      chat_model: "gpt-4"
+      embedding_model: "text-embedding-3-large"
+      embedding_dimension: 3072
+    python_expert:
+      chat_model: "gpt-4"
+    milvus_expert:
+      chat_model: "gpt-3.5-turbo"
+    devops_expert:
+      chat_model: "gpt-3.5-turbo"
+
 # 添加新 channel
 channels:
   my_new_channel:

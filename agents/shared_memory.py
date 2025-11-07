@@ -35,7 +35,8 @@ from pymilvus import (
     utility,
 )
 
-from utils.openai_client import get_openai_client
+from utils.openai_client import get_openai_client, OpenAIClientWrapper
+from utils.config_manager import get_config_manager
 
 
 @dataclass
@@ -162,8 +163,7 @@ class SharedMemory:
     def __init__(
         self,
         milvus_uri: Optional[str] = None,
-        embedding_model: Optional[str] = None,
-        embedding_dimension: Optional[int] = None,
+        agent_name: str = "shared_memory",
         cache_size: int = 1000
     ):
         """Initialize shared memory system.
@@ -172,19 +172,32 @@ class SharedMemory:
         ----------
         milvus_uri:
             Milvus connection URI. Defaults to MILVUS_URI env var or local file.
-        embedding_model:
-            Embedding model name. Defaults to EMBEDDING_MODEL env var.
-        embedding_dimension:
-            Embedding vector dimension. Defaults to 3072 for text-embedding-3-large.
+        agent_name:
+            Name of the agent for configuration purposes. Defaults to "shared_memory".
         cache_size:
             Maximum number of embeddings to cache.
         """
         self.milvus_uri = milvus_uri or os.getenv("MILVUS_URI", "./multi_agent_memory.db")
-        self.embedding_model = embedding_model or os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-        self.embedding_dimension = embedding_dimension or int(os.getenv("EMBEDDING_DIMENSION", "3072"))
         
-        # Initialize components
-        self.openai_client = get_openai_client()
+        # For backward compatibility with tests, use global client if agent_name is default
+        if agent_name == "shared_memory":
+            self.openai_client = get_openai_client()
+            # Extract model and dimension from global client config
+            config_manager = get_config_manager()
+            global_config = config_manager.get_global_config()
+            self.embedding_model = global_config.embedding_api.model
+            self.embedding_dimension = global_config.embedding_api.dimension
+        else:
+            # Get configuration for the specified agent
+            config_manager = get_config_manager()
+            agent_config = config_manager.get_agent_config(agent_name)
+            
+            self.embedding_model = agent_config.embedding_api.model
+            self.embedding_dimension = agent_config.embedding_api.dimension
+            
+            # Initialize components
+            self.openai_client = OpenAIClientWrapper(config=agent_config)
+        
         self.embedding_cache = EmbeddingCache(cache_size)
         self.metrics = MemoryMetrics()
         

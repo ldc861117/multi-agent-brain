@@ -18,7 +18,7 @@ from loguru import logger
 
 from agents.base import AgentResponse, BaseAgent
 from agents.shared_memory import SharedMemory
-from utils import get_openai_client
+from utils import get_agent_config, get_openai_client, OpenAIClientWrapper
 
 
 class CoordinationAgent(BaseAgent):
@@ -41,8 +41,12 @@ class CoordinationAgent(BaseAgent):
     def __init__(self):
         """Initialize the CoordinationAgent."""
         super().__init__()
-        self.client = get_openai_client()
-        self.memory = SharedMemory()
+        
+        # Get agent-specific configuration
+        agent_config = get_agent_config(self.name)
+        self.client = OpenAIClientWrapper(config=agent_config)
+        
+        self.memory = SharedMemory(agent_name=self.name)
         self.logger = logger.bind(agent_id="coordination")
 
         # Mapping of expert types to channel names

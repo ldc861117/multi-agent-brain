@@ -748,6 +748,10 @@ async def test_my_agent_handle_message():
 # 运行测试
 pytest test_my_expert.py -v  # 如果在根目录
 pytest --cov=agents --cov=utils --cov-report=html  # 覆盖率
+
+# 运行 .env 配置测试
+pytest utils/test_env_config.py -v  # 环境配置测试
+python verify_test.py  # 验证测试文件结构
 ```
 
 ## 13. 文档交叉引用

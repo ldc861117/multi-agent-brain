@@ -549,15 +549,23 @@ class SharedMemory:
             elif collection == self.COLLECTION_PROBLEM_SOLUTIONS:
                 output_fields.extend(["problem", "solution"])
             
-            # For partition key filtering, use partition_names instead of expr
-            results = collection_obj.search(
-                data=[query_embedding],
-                anns_field="embedding",
-                param=search_params,
-                limit=top_k,
-                partition_names=[tenant_id],
-                output_fields=output_fields
-            )
+            # Apply tenant filtering while respecting partition key mode
+            expr = f"tenant_id == {json.dumps(tenant_id)}"
+            uses_partition_key = any(getattr(field, "is_partition_key", False) for field in collection_obj.schema.fields)
+
+            search_kwargs = {
+                "data": [query_embedding],
+                "anns_field": "embedding",
+                "param": search_params,
+                "limit": top_k,
+                "output_fields": output_fields,
+                "expr": expr,
+            }
+
+            if not uses_partition_key:
+                search_kwargs["partition_names"] = [tenant_id]
+
+            results = collection_obj.search(**search_kwargs)
             
             # Process results
             processed_results = []
@@ -766,9 +774,7 @@ class SharedMemory:
         try:
             collection_obj = self._get_collection(collection)
             
-            # Build expression for tenant filtering
-            expr = f"tenant_id == '{tenant_id}'" if tenant_id else None
-            
+
             # Get statistics
             stats = {
                 "collection": collection,
@@ -778,12 +784,18 @@ class SharedMemory:
             }
             
             if tenant_id:
-                # Query for tenant-specific count using partition
+                expr = f"tenant_id == {json.dumps(tenant_id)}"
+                uses_partition_key = any(getattr(field, "is_partition_key", False) for field in collection_obj.schema.fields)
+                query_kwargs = {"output_fields": ["id"], "expr": expr}
+
+                if not uses_partition_key:
+                    query_kwargs["partition_names"] = [tenant_id]
+
                 try:
-                    result = collection_obj.query(output_fields=["id"], partition_names=[tenant_id])
+                    result = collection_obj.query(**query_kwargs)
                     stats["tenant_records"] = len(result)
                 except Exception:
-                    # Fallback if partition doesn't exist
+                    # Fallback if partition doesn't exist or query fails
                     stats["tenant_records"] = 0
             
             return stats
@@ -810,38 +822,41 @@ class SharedMemory:
         """
         try:
             collection_obj = self._get_collection(collection)
-            
-            # For partition key, we need to delete by loading the partition
-            # and using a delete expression
-            try:
-                # Load the specific partition
-                collection_obj.load([tenant_id])
-                
-                # Query for records in this partition
-                result = collection_obj.query(output_fields=["id"], partition_names=[tenant_id])
-                record_ids = [item["id"] for item in result]
-                
-                if record_ids:
-                    # Delete records
-                    expr = f"id in {record_ids}"
-                    collection_obj.delete(expr)
-                    collection_obj.flush()
-                    
-            except Exception as e:
-                # Fallback: try to delete all records in partition
-                # collection_obj.delete("")  # Empty expr to delete all - commented out
-                # collection_obj.flush()
-                record_ids = ["all"]  # Indicate we attempted to delete all
-                
-                logger.info(
-                    f"Deleted {len(record_ids)} records for tenant {tenant_id} from {collection}",
-                    extra={"collection": collection, "tenant_id": tenant_id, "count": len(record_ids)}
+            uses_partition_key = any(getattr(field, "is_partition_key", False) for field in collection_obj.schema.fields)
+
+            if uses_partition_key:
+                logger.warning(
+                    "Partition-key collections do not support targeted tenant deletion; skipping operation",
+                    extra={"collection": collection, "tenant_id": tenant_id}
                 )
-                
-                return len(record_ids)
-            
-            return 0
-            
+                return 0
+
+            expr = f"tenant_id == {json.dumps(tenant_id)}"
+            query_kwargs = {"expr": expr, "output_fields": ["id"]}
+
+            records = collection_obj.query(**query_kwargs)
+            record_ids = [item["id"] for item in records]
+
+            if not record_ids:
+                logger.info(
+                    f"No records found for tenant {tenant_id} in {collection}",
+                    extra={"collection": collection, "tenant_id": tenant_id}
+                )
+                return 0
+
+            delete_expr = f"id in {record_ids}"
+            delete_result = collection_obj.delete(delete_expr)
+            collection_obj.flush()
+
+            deleted_count = getattr(delete_result, "delete_count", len(record_ids))
+
+            logger.info(
+                f"Deleted {deleted_count} records for tenant {tenant_id} from {collection}",
+                extra={"collection": collection, "tenant_id": tenant_id, "count": deleted_count}
+            )
+
+            return deleted_count
+        
         except Exception as e:
             logger.error(
                 f"Failed to delete tenant data from {collection}",

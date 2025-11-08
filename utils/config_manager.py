@@ -204,6 +204,30 @@ class ConfigManager:
         config = self.get_agent_config(agent_name)
         return config.embedding_api.dimension
     
+    def get_agent_answer_verbose(self, agent_name: str) -> bool:
+        """Get the answer verbosity setting for a specific agent.
+        
+        Parameters
+        ----------
+        agent_name:
+            Name of the agent.
+            
+        Returns
+        -------
+        bool
+            True if verbose answers are enabled, False for concise.
+        """
+        # Load YAML configuration
+        yaml_config = self._load_yaml_config()
+        
+        # Check for agent overrides
+        api_config = yaml_config.get('api_config', {})
+        agent_overrides = api_config.get('agent_overrides', {})
+        agent_override = agent_overrides.get(agent_name, {})
+        
+        # Return verbose setting if specified, default to False (concise)
+        return agent_override.get('answer_verbose', False)
+    
     def reload_config(self):
         """Reload configuration from file and clear cache."""
         self._yaml_config = None
@@ -243,6 +267,22 @@ def get_agent_config(agent_name: str) -> OpenAIConfig:
         Configuration with agent-specific overrides applied.
     """
     return get_config_manager().get_agent_config(agent_name)
+
+
+def get_agent_answer_verbose(agent_name: str) -> bool:
+    """Get the answer verbosity setting for a specific agent.
+    
+    Parameters
+    ----------
+    agent_name:
+        Name of the agent.
+        
+    Returns
+    -------
+    bool
+        True if verbose answers are enabled, False for concise.
+    """
+    return get_config_manager().get_agent_answer_verbose(agent_name)
 
 
 def reload_config():

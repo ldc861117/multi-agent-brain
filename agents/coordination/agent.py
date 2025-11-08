@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 import uuid
 from datetime import datetime
@@ -38,6 +39,78 @@ class CoordinationAgent(BaseAgent):
         " multi-agent collaboration."
     )
 
+    SUPPORTED_EXPERTS = {"python", "milvus", "devops"}
+    HEURISTIC_KEYWORDS = {
+        "python": [
+            "python",
+            "async",
+            "await",
+            "pytest",
+            "pip",
+            "poetry",
+            "django",
+            "fastapi",
+            "list comprehension",
+            "gil",
+            "pydantic",
+            "microservice",
+            "flask",
+            "typing",
+        ],
+        "milvus": [
+            "milvus",
+            "vector database",
+            "embedding",
+            "vector search",
+            "hnsw",
+            "ivf",
+            "ann index",
+            "collection",
+            "partition",
+            "zilliz",
+            "faiss",
+            "pymilvus",
+            "vector index",
+        ],
+        "devops": [
+            "ci cd",
+            "cicd",
+            "pipeline",
+            "deploy",
+            "deployment",
+            "docker",
+            "kubernetes",
+            "terraform",
+            "ansible",
+            "infrastructure",
+            "monitoring",
+            "observability",
+            "prometheus",
+            "grafana",
+            "devops",
+            "iac",
+            "infrastructure as code",
+            "sre",
+            "automation",
+        ],
+    }
+    HEURISTIC_MULTI_DOMAIN_HINTS = [
+        "compare",
+        "comparison",
+        "integrate",
+        "integration",
+        "architecture",
+        "end to end",
+        "best practice",
+        "best practices",
+        "workflow",
+        "strategy",
+        "optimize",
+        "optimization",
+        "scalability",
+        "scale",
+    ]
+
     def __init__(self):
         """Initialize the CoordinationAgent."""
         super().__init__()
@@ -60,6 +133,250 @@ class CoordinationAgent(BaseAgent):
         self.active_collaborations: Dict[str, Dict[str, Any]] = {}
 
         self.logger.info("CoordinationAgent initialized")
+
+    @staticmethod
+    def _normalize_expert_label(label: Any) -> Optional[str]:
+        """Normalize expert label to supported identifier."""
+        if not isinstance(label, str):
+            return None
+
+        normalized = label.strip().lower()
+        alias_map = {
+            "python_expert": "python",
+            "milvus_expert": "milvus",
+            "devops_expert": "devops",
+        }
+        normalized = alias_map.get(normalized, normalized)
+        return normalized if normalized in CoordinationAgent.SUPPORTED_EXPERTS else None
+
+    @staticmethod
+    def _extract_keywords(question: str, limit: int = 5) -> List[str]:
+        """Derive a lightweight keyword list from the question."""
+
+        tokens = re.findall(r"[a-zA-Z0-9+#]+", question.lower())
+        stop_words = {
+            "what",
+            "how",
+            "best",
+            "with",
+            "from",
+            "that",
+            "this",
+            "using",
+            "your",
+            "about",
+            "into",
+            "which",
+            "their",
+        }
+
+        keywords: List[str] = []
+        for token in tokens:
+            if len(token) <= 2:
+                continue
+            if token in stop_words:
+                continue
+            if token not in keywords:
+                keywords.append(token)
+            if len(keywords) >= limit:
+                break
+
+        return keywords or tokens[:limit]
+
+    def _determine_complexity(
+        self,
+        experts: List[str],
+        question: str,
+        base_complexity: Optional[str] = None,
+        heuristic_complexity: Optional[str] = None,
+    ) -> str:
+        """Determine complexity level using available signals."""
+        allowed_values = {"simple", "medium", "complex"}
+
+        if base_complexity in allowed_values:
+            complexity = base_complexity
+        elif heuristic_complexity in allowed_values:
+            complexity = heuristic_complexity
+        else:
+            normalized = question.lower()
+            if len(experts) >= 3:
+                complexity = "complex"
+            elif len(experts) == 2:
+                multi_hints = (
+                    "compare",
+                    "comparison",
+                    "architecture",
+                    "integration",
+                    "workflow",
+                    "design",
+                    "optimize",
+                    "strategy",
+                )
+                complexity = (
+                    "complex"
+                    if any(hint in normalized for hint in multi_hints)
+                    else "medium"
+                )
+            else:
+                detail_hints = (
+                    "optimize",
+                    "best practice",
+                    "best practices",
+                    "debug",
+                    "scale",
+                    "scalability",
+                    "architecture",
+                    "strategy",
+                )
+                complexity = (
+                    "medium"
+                    if any(hint in normalized for hint in detail_hints)
+                    else "simple"
+                )
+
+        return complexity
+
+    def _heuristic_analysis(
+        self, question: str, failure_reason: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Fallback heuristic analysis when LLM output is unavailable or unreliable."""
+        normalized_question = (
+            question.lower()
+            .replace("async/await", "async await")
+            .replace("ci/cd", "ci cd")
+            .replace("dev-ops", "devops")
+            .replace("end-to-end", "end to end")
+        )
+
+        matched_experts: set[str] = set()
+        matched_tokens: set[str] = set()
+
+        for expert, keywords in self.HEURISTIC_KEYWORDS.items():
+            for keyword in keywords:
+                if keyword in normalized_question:
+                    matched_experts.add(expert)
+                    matched_tokens.add(keyword)
+
+        if "vector database" in normalized_question or "vector db" in normalized_question or "embeddings" in normalized_question:
+            matched_experts.add("milvus")
+        if "vector search" in normalized_question:
+            matched_experts.add("milvus")
+        if "multi agent" in normalized_question or "multi-agent" in normalized_question:
+            matched_experts.update({"python", "devops"})
+        if "workflow" in normalized_question and "pipeline" in normalized_question:
+            matched_experts.add("devops")
+        if "best practice" in normalized_question and "milvus" in normalized_question:
+            matched_experts.add("python")
+
+        if matched_experts and "milvus" in matched_experts:
+            if any(hint in normalized_question for hint in self.HEURISTIC_MULTI_DOMAIN_HINTS):
+                matched_experts.add("python")
+                if any(word in normalized_question for word in ("deploy", "pipeline", "workflow", "infrastructure", "strategy")):
+                    matched_experts.add("devops")
+
+        if not matched_experts:
+            matched_experts.add("python")
+
+        sorted_experts = sorted(matched_experts)
+        complexity = self._determine_complexity(sorted_experts, question)
+        keywords = self._extract_keywords(question)
+
+        reasoning_bits: List[str] = []
+        if failure_reason:
+            reasoning_bits.append(f"Heuristic routing used because {failure_reason}.")
+        if matched_tokens:
+            reasoning_bits.append(
+                "Matched keywords: " + ", ".join(sorted(matched_tokens))
+            )
+        else:
+            reasoning_bits.append("Defaulted to core expert set based on domain heuristics.")
+
+        return {
+            "question": question,
+            "required_experts": sorted_experts,
+            "complexity": complexity,
+            "keywords": keywords,
+            "reasoning": " ".join(reasoning_bits),
+        }
+
+    def _merge_analysis(self, question: str, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Combine LLM analysis with heuristic safeguards."""
+        heuristics = self._heuristic_analysis(question)
+
+        raw_experts = analysis.get("required_experts") or []
+        normalized_experts = [
+            expert
+            for expert in (
+                self._normalize_expert_label(item) for item in raw_experts
+            )
+            if expert is not None
+        ]
+
+        merged_experts = sorted(set(normalized_experts) | set(heuristics["required_experts"]))
+        if not merged_experts:
+            return heuristics
+
+        complexity = self._determine_complexity(
+            merged_experts,
+            question,
+            base_complexity=analysis.get("complexity"),
+            heuristic_complexity=heuristics.get("complexity"),
+        )
+
+        keywords = analysis.get("keywords") or heuristics.get("keywords")
+
+        reasoning_segments: List[str] = []
+        if analysis.get("reasoning"):
+            reasoning_segments.append(str(analysis["reasoning"]))
+
+        additional_experts = set(merged_experts) - set(normalized_experts)
+        if additional_experts:
+            reasoning_segments.append(
+                "Heuristic routing added: " + ", ".join(sorted(additional_experts))
+            )
+
+        if not reasoning_segments:
+            reasoning_segments.append("LLM analysis completed")
+
+        return {
+            "question": question,
+            "required_experts": merged_experts,
+            "complexity": complexity,
+            "keywords": keywords,
+            "reasoning": " | ".join(reasoning_segments),
+        }
+
+    def _generate_fallback_response(self, expert: str, question: str) -> str:
+        """Generate a deterministic expert response when the LLM is unavailable."""
+        question = question.strip()
+        templates = {
+            "python": (
+                f"As the Python expert, consider tackling '{question}' by:\n"
+                "- Identifying the core language features involved (asyncio, typing, performance).\n"
+                "- Highlighting tooling or libraries that directly address the request.\n"
+                "- Providing concrete steps the user can follow immediately."
+            ),
+            "milvus": (
+                f"As the Milvus expert, address '{question}' by focusing on:\n"
+                "- Collection and partition design for the workload.\n"
+                "- Appropriate index selection and parameter tuning.\n"
+                "- Operational safeguards such as replication, backups, and monitoring."
+            ),
+            "devops": (
+                f"From a DevOps perspective, respond to '{question}' by covering:\n"
+                "- Automation workflows (CI/CD, infrastructure-as-code).\n"
+                "- Observability, monitoring, and rollback strategies.\n"
+                "- Security and compliance considerations for the deployment pipeline."
+            ),
+        }
+
+        return templates.get(
+            expert,
+            (
+                f"Provide pragmatic guidance for '{question}' from the {expert} domain, "
+                "covering immediate steps and longer-term considerations."
+            ),
+        )
 
     def analyze_question(self, question: str) -> Dict[str, Any]:
         """Analyze user question to determine required expertise and complexity.
@@ -131,28 +448,24 @@ Guidelines:
             else:
                 raise ValueError("No JSON found in response")
 
-            analysis["question"] = question
+            if not isinstance(analysis, dict):
+                raise ValueError("LLM analysis did not return a JSON object")
+
+            merged_analysis = self._merge_analysis(question, analysis)
 
             self.logger.info(
                 "Question analyzed",
                 extra={
-                    "required_experts": analysis.get("required_experts"),
-                    "complexity": analysis.get("complexity"),
+                    "required_experts": merged_analysis.get("required_experts"),
+                    "complexity": merged_analysis.get("complexity"),
                 },
             )
 
-            return analysis
+            return merged_analysis
 
         except Exception as e:
             self.logger.error(f"Failed to analyze question: {e}")
-            # Graceful degradation: default analysis
-            return {
-                "question": question,
-                "required_experts": ["python"],
-                "complexity": "medium",
-                "keywords": question.split()[:5],
-                "reasoning": "Analysis failed, using default analysis",
-            }
+            return self._heuristic_analysis(question, failure_reason=str(e))
 
     async def retrieve_similar_knowledge(
         self, question: str, tenant_id: str = "default"
@@ -371,7 +684,7 @@ Guidelines:
 
         except Exception as e:
             self.logger.error(f"Failed to get expert response for {expert}: {e}")
-            return f"Unable to get response from {expert} expert"
+            return self._generate_fallback_response(expert, question)
 
     async def synthesize_answer(
         self,

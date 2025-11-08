@@ -177,7 +177,7 @@ run_demo() {
     MODE=${1:-"interactive"}
     
     case $MODE in
-        "interactive"|"automated"|"benchmark")
+        "interactive"|"automated"|"benchmark"|"verify-routing")
             print_info "运行模式: $MODE"
             ;;
         *)
@@ -186,9 +186,13 @@ run_demo() {
             ;;
     esac
     
-    # 运行 DEMO
+    # 运行 DEMO 或验证脚本
     print_info "启动 DEMO..."
-    python3 demo_runner.py --mode $MODE
+    if [[ "$MODE" == "verify-routing" ]]; then
+        python3 verify_multi_expert_dispatch.py
+    else
+        python3 demo_runner.py --mode $MODE
+    fi
 }
 
 # 清理函数
@@ -218,9 +222,10 @@ show_help() {
     echo "用法: $0 [选项] [模式]"
     echo ""
     echo "模式:"
-    echo "  interactive   交互式模式（默认）"
-    echo "  automated     自动化模式"
-    echo "  benchmark     性能测试模式"
+    echo "  interactive     交互式模式（默认）"
+    echo "  automated       自动化模式"
+    echo "  benchmark       性能测试模式"
+    echo "  verify-routing  离线验证 multi-expert 路由与协作"
     echo ""
     echo "选项:"
     echo "  -h, --help    显示此帮助信息"
@@ -228,10 +233,11 @@ show_help() {
     echo "  --no-deps     跳过依赖安装"
     echo ""
     echo "示例:"
-    echo "  $0                    # 交互式模式"
-    echo "  $0 automated          # 自动化模式"
-    echo "  $0 benchmark          # 性能测试模式"
-    echo "  $0 --no-check demo   # 跳过检查运行交互模式"
+    echo "  $0                       # 交互式模式"
+    echo "  $0 automated             # 自动化模式"
+    echo "  $0 benchmark             # 性能测试模式"
+    echo "  $0 verify-routing        # 验证多专家路由与协作"
+    echo "  $0 --no-check interactive # 跳过检查运行交互模式"
 }
 
 # 解析命令行参数
@@ -252,7 +258,7 @@ while [[ $# -gt 0 ]]; do
             SKIP_DEPS=true
             shift
             ;;
-        interactive|automated|benchmark)
+        interactive|automated|benchmark|verify-routing)
             MODE=$1
             shift
             ;;

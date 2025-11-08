@@ -43,7 +43,7 @@ class MultiAgentDemo:
 
     def __init__(self, mode: str = "interactive", config_file: str = "config.yaml"):
         """Initialize the DEMO with specified mode and configuration."""
-        self.mode = DemoMode(mode)
+        self.mode = mode
         self.config_file = config_file
         self.agents = {}
         self.memory = None

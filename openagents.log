@@ -1,0 +1,49 @@
+Creating network with temporary workspace
+Loaded network configuration from config.yaml
+Initializing WorkspaceManager at /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_ufexb47q
+Workspace initialized successfully at /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_ufexb47q
+Created temporary workspace at /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_ufexb47q
+AgentIdentityManager initialized with session timeout=24h
+Created network: multi-agent-http
+Loaded 0 network mods: []
+Workspace path: /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_ufexb47q
+Workspace initialized with 0 mod directories
+HTTP transport listening on 0.0.0.0:8700
+Started TransportType.HTTP transport on 0.0.0.0:8700
+Centralized topology initialized with 1 transports
+Agent network 'multi-agent-http' initialized successfully
+Network 'multi-agent-http' started successfully
+Network mode: NetworkMode.CENTRALIZED
+Transport TransportType.HTTP: 0.0.0.0:default
+Network statistics: {'network_id': 'network-daa70fc8', 'network_name': 'multi-agent-http', 'is_running': True, 'uptime_seconds': 0.002099752426147461, 'agent_count': 0, 'agents': {}, 'groups': {}, 'group_config': [{'name': 'guest', 'description': 'Agents without valid credentials', 'agent_count': 0, 'metadata': {}}], 'mods': [], 'topology_mode': <NetworkMode.CENTRALIZED: 'centralized'>, 'transports': [{'type': <TransportType.HTTP: 'http'>, 'config': {}}], 'manifest_transport': 'http', 'recommended_transport': 'http', 'max_connections': 100}
+Running network indefinitely (Ctrl+C to stop)
+Starting heartbeat monitor (interval: 30s, timeout: 180.0s)
+Received shutdown signal
+Heartbeat monitor cancelled
+Shutting down network...
+Shutdown TransportType.HTTP transport
+Centralized topology shutdown
+Agent network 'multi-agent-http' shutdown successfully
+Network shutdown complete
+Centralized topology shutdown
+Agent network 'multi-agent-http' shutdown successfully
+Creating network with temporary workspace
+Loaded network configuration from config.yaml
+Initializing WorkspaceManager at /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_edh__s9n
+Workspace initialized successfully at /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_edh__s9n
+Created temporary workspace at /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_edh__s9n
+AgentIdentityManager initialized with session timeout=24h
+Created network: multi-agent-http
+Loaded 0 network mods: []
+Workspace path: /var/folders/cs/jdzblv1x1sv2x_7hyh_x7k800000gn/T/openagents_workspace_edh__s9n
+Workspace initialized with 0 mod directories
+HTTP transport listening on 0.0.0.0:8700
+Started TransportType.HTTP transport on 0.0.0.0:8700
+Centralized topology initialized with 1 transports
+Agent network 'multi-agent-http' initialized successfully
+Network 'multi-agent-http' started successfully
+Network mode: NetworkMode.CENTRALIZED
+Transport TransportType.HTTP: 0.0.0.0:default
+Network statistics: {'network_id': 'network-4c713daf', 'network_name': 'multi-agent-http', 'is_running': True, 'uptime_seconds': 0.002031087875366211, 'agent_count': 0, 'agents': {}, 'groups': {}, 'group_config': [{'name': 'guest', 'description': 'Agents without valid credentials', 'agent_count': 0, 'metadata': {}}], 'mods': [], 'topology_mode': <NetworkMode.CENTRALIZED: 'centralized'>, 'transports': [{'type': <TransportType.HTTP: 'http'>, 'config': {}}], 'manifest_transport': 'http', 'recommended_transport': 'http', 'max_connections': 100}
+Running network indefinitely (Ctrl+C to stop)
+Starting heartbeat monitor (interval: 30s, timeout: 180.0s)

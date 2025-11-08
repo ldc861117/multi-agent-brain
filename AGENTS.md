@@ -38,7 +38,7 @@ cp .env.example .env
 # 编辑 .env 文件，配置你的 API 密钥和端点
 
 # 3. 启动 OpenAgents 网络
-openagents network http --config config.yaml  # 后台运行或新终端
+openagents network start config.yaml  # 后台运行或新终端
 
 # 4. 启动 Studio UI（新终端，可选）
 openagents studio --config config.yaml
@@ -390,7 +390,7 @@ Codemap: 2.3-2.4
   curl http://localhost:11434/v1/models
   
 步骤 4: 启动系统
-  openagents network http --config config.yaml
+  openagents network start config.yaml
 
 注意: 本地 LLM 可能较慢，调整 timeout
 ```
@@ -723,7 +723,7 @@ routing:
 
 ```bash
 # 启动系统
-openagents network http --config config.yaml
+openagents network start config.yaml
 openagents studio --config config.yaml  # 可选
 
 # 验证服务

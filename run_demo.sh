@@ -146,7 +146,7 @@ start_openagents() {
         
         # 后台启动 OpenAgents
         if command -v openagents &> /dev/null; then
-            openagents network http --config config.yaml &
+            openagents network start config.yaml &
             OPENAGENTS_PID=$!
             
             # 等待网络启动

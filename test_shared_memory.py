@@ -12,6 +12,8 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
+from pymilvus import utility
+
 from agents.shared_memory import AsyncSharedMemory, EmbeddingCache, MemoryMetrics, SharedMemory
 
 
@@ -282,6 +284,39 @@ class TestSharedMemory(unittest.TestCase):
         )
         
         self.assertIsInstance(record_id, int)
+    
+    @patch('agents.shared_memory.get_openai_client')
+    def test_problem_solutions_cold_start_search_is_resilient(self, mock_get_client):
+        """Ensure problem_solutions search bootstraps missing collections."""
+        mock_get_client.return_value = self.mock_openai_client
+        
+        memory = SharedMemory()
+        
+        if utility.has_collection(SharedMemory.COLLECTION_PROBLEM_SOLUTIONS, using=memory.connection_alias):
+            utility.drop_collection(SharedMemory.COLLECTION_PROBLEM_SOLUTIONS, using=memory.connection_alias)
+
+            start = time.time()
+            while utility.has_collection(SharedMemory.COLLECTION_PROBLEM_SOLUTIONS, using=memory.connection_alias):
+                if time.time() - start > 5:
+                    break
+                time.sleep(0.1)
+        
+        self.assertFalse(
+            utility.has_collection(SharedMemory.COLLECTION_PROBLEM_SOLUTIONS, using=memory.connection_alias)
+        )
+        
+        results = memory.search_knowledge(
+            SharedMemory.COLLECTION_PROBLEM_SOLUTIONS,
+            "tenant1",
+            "cold start bootstrap test",
+            top_k=3,
+            threshold=0.1,
+        )
+        
+        self.assertEqual(results, [])
+        self.assertTrue(
+            utility.has_collection(SharedMemory.COLLECTION_PROBLEM_SOLUTIONS, using=memory.connection_alias)
+        )
     
     @patch('agents.shared_memory.get_openai_client')
     def test_get_collection_stats(self, mock_get_client):

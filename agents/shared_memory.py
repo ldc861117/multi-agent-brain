@@ -281,8 +281,120 @@ class SharedMemory:
         
         return CollectionSchema(fields, f"Schema for {collection_name}")
     
+    def _get_index_params(self) -> Dict[str, Any]:
+        """Return index parameters for embedding fields."""
+        return {
+            "metric_type": "COSINE",
+            "index_type": "AUTOINDEX",
+        }
+    
+    def _collection_uses_partition_key(self, collection_obj: Collection) -> bool:
+        """Determine if the collection uses a partition key."""
+        return any(getattr(field, "is_partition_key", False) for field in collection_obj.schema.fields)
+    
+    def _ensure_collection_ready(self, collection_name: str, *, bootstrap: bool = False) -> Collection:
+        """Ensure the specified collection and its index exist."""
+        phase = "bootstrap" if bootstrap else "lazy_bootstrap"
+        try:
+            exists = utility.has_collection(collection_name, using=self.connection_alias)
+            logger.debug(
+                "Milvus collection existence check",
+                extra={"collection": collection_name, "exists": exists, "phase": phase},
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to check Milvus collection existence",
+                extra={"collection": collection_name, "error": str(e), "phase": phase},
+            )
+            raise MilvusException(f"Collection existence check failed: {e}") from e
+        
+        if not exists:
+            schema = self._create_collection_schema(collection_name)
+            try:
+                collection = Collection(collection_name, schema, using=self.connection_alias)
+                logger.info(
+                    "Created Milvus collection",
+                    extra={
+                        "collection": collection_name,
+                        "phase": phase,
+                        "fields": [field.name for field in schema.fields],
+                        "partition_key_enabled": any(getattr(field, "is_partition_key", False) for field in schema.fields),
+                    },
+                )
+            except Exception as create_error:
+                logger.error(
+                    "Failed to create Milvus collection",
+                    extra={"collection": collection_name, "error": str(create_error), "phase": phase},
+                )
+                raise MilvusException(f"Collection creation failed: {create_error}") from create_error
+        else:
+            collection = Collection(collection_name, using=self.connection_alias)
+        
+        uses_partition_key = self._collection_uses_partition_key(collection)
+        index_params = self._get_index_params()
+        has_embedding_index = False
+        try:
+            indexes = collection.indexes
+            for index in indexes:
+                params = getattr(index, "params", {}) or {}
+                if isinstance(params, str):
+                    try:
+                        params = json.loads(params)
+                    except Exception:
+                        params = {}
+                field_name = (
+                    params.get("field_name")
+                    if isinstance(params, dict)
+                    else None
+                )
+                if not field_name:
+                    field_name = getattr(index, "field_name", None)
+                if field_name == "embedding":
+                    has_embedding_index = True
+                    break
+        except Exception as index_inspection_error:
+            logger.warning(
+                "Unable to inspect Milvus indexes",
+                extra={
+                    "collection": collection_name,
+                    "error": str(index_inspection_error),
+                    "phase": phase,
+                },
+            )
+        
+        if not has_embedding_index:
+            try:
+                collection.create_index("embedding", index_params)
+                has_embedding_index = True
+                logger.info(
+                    "Ensured Milvus index",
+                    extra={
+                        "collection": collection_name,
+                        "phase": phase,
+                        "index_params": index_params,
+                    },
+                )
+            except Exception as index_error:
+                logger.error(
+                    "Failed to create Milvus index",
+                    extra={"collection": collection_name, "error": str(index_error), "phase": phase},
+                )
+                raise MilvusException(f"Index creation failed: {index_error}") from index_error
+        
+        logger.debug(
+            "Milvus collection ready",
+            extra={
+                "collection": collection_name,
+                "phase": phase,
+                "partition_key_enabled": uses_partition_key,
+                "has_embedding_index": has_embedding_index,
+            },
+        )
+        
+        return collection
+    
     def _initialize_collections(self):
-        """Initialize all three collections if they don't exist."""
+        """Initialize all managed collections."""
         collections = [
             self.COLLECTION_EXPERT_KNOWLEDGE,
             self.COLLECTION_COLLABORATION_HISTORY,
@@ -290,43 +402,37 @@ class SharedMemory:
         ]
         
         for collection_name in collections:
-            try:
-                if utility.has_collection(collection_name, using=self.connection_alias):
-                    logger.debug(f"Collection {collection_name} already exists")
-                    continue
-                
-                # Create collection
-                schema = self._create_collection_schema(collection_name)
-                collection = Collection(collection_name, schema, using=self.connection_alias)
-                
-                # Create index for embedding field
-                # Use AUTOINDEX for Milvus Lite compatibility
-                index_params = {
-                    "metric_type": "COSINE",
-                    "index_type": "AUTOINDEX",
-                }
-                collection.create_index("embedding", index_params)
-                
-                logger.info(f"Created collection {collection_name}")
-                
-            except Exception as e:
-                logger.error(f"Failed to create collection {collection_name}", extra={"error": str(e)})
-                raise MilvusException(f"Collection creation failed: {e}")
+            self._ensure_collection_ready(collection_name, bootstrap=True)
     
     def _get_collection(self, collection_name: str) -> Collection:
-        """Get collection object."""
+        """Get collection object, ensuring it is created when missing."""
         try:
-            if not utility.has_collection(collection_name, using=self.connection_alias):
-                raise ValueError(f"Collection {collection_name} does not exist")
-            
-            collection = Collection(collection_name, using=self.connection_alias)
+            collection = self._ensure_collection_ready(collection_name)
             collection.load()
             return collection
-            
         except Exception as e:
             logger.error(f"Failed to get collection {collection_name}", extra={"error": str(e)})
             self.metrics.errors_count += 1
-            raise MilvusException(f"Failed to get collection: {e}")
+            raise MilvusException(f"Failed to get collection: {e}") from e
+    
+    def _should_bootstrap_on_error(self, error: Exception) -> bool:
+        """Check if the error indicates the collection or index needs bootstrapping."""
+        error_message = str(error).lower()
+        bootstrap_indicators = [
+            "collection not exist",
+            "collection doesn't exist",
+            "collection does not exist",
+            "collection not found",
+            "cannot find collection",
+            "can't find collection",
+            "collection has not been loaded",
+            "index not found",
+            "index doesn't exist",
+            "index does not exist",
+            "index not exist",
+            "has no index",
+        ]
+        return any(indicator in error_message for indicator in bootstrap_indicators)
     
     def _generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text with caching."""
@@ -494,26 +600,7 @@ class SharedMemory:
         top_k: int = 5,
         threshold: float = 0.5
     ) -> List[Dict]:
-        """Search knowledge using semantic similarity.
-        
-        Parameters
-        ----------
-        collection:
-            Target collection name.
-        tenant_id:
-            Tenant ID for multi-tenant isolation.
-        query:
-            Query text for semantic search.
-        top_k:
-            Number of results to return.
-        threshold:
-            Similarity threshold (0-1).
-            
-        Returns
-        -------
-        List[Dict]
-            List of search results with similarity scores.
-        """
+        """Search knowledge using semantic similarity."""
         start_time = time.time()
         
         try:
@@ -531,8 +618,9 @@ class SharedMemory:
             # Generate query embedding
             query_embedding = self._generate_embedding(query)
             
-            # Search in collection
+            # Ensure collection is ready
             collection_obj = self._get_collection(collection)
+            uses_partition_key = self._collection_uses_partition_key(collection_obj)
             
             search_params = {
                 "metric_type": "COSINE",
@@ -551,8 +639,6 @@ class SharedMemory:
             
             # Apply tenant filtering while respecting partition key mode
             expr = f"tenant_id == {json.dumps(tenant_id)}"
-            uses_partition_key = any(getattr(field, "is_partition_key", False) for field in collection_obj.schema.fields)
-
             search_kwargs = {
                 "data": [query_embedding],
                 "anns_field": "embedding",
@@ -561,25 +647,45 @@ class SharedMemory:
                 "output_fields": output_fields,
                 "expr": expr,
             }
-
+            
             if not uses_partition_key:
                 search_kwargs["partition_names"] = [tenant_id]
-
+            
+            logger.debug(
+                "Executing Milvus search",
+                extra={
+                    "collection": collection,
+                    "tenant_id": tenant_id,
+                    "top_k": top_k,
+                    "threshold": threshold,
+                    "partition_key_enabled": uses_partition_key,
+                    "search_param": search_params,
+                    "expr": expr,
+                },
+            )
+            
             results = collection_obj.search(**search_kwargs)
             
             # Process results
-            processed_results = []
-            similarities = []
+            processed_results: List[Dict] = []
+            similarities: List[float] = []
             
-            for hit in results[0]:
+            hits = results[0] if results else []
+            
+            for hit in hits:
                 similarity = 1 - hit.distance  # Convert distance to similarity
                 
                 if similarity >= threshold:
+                    metadata_value = hit.entity.get("metadata", "{}")
+                    if isinstance(metadata_value, str):
+                        metadata_value = json.loads(metadata_value or "{}")
+                    metadata_value = metadata_value or {}
+                    
                     result_data = {
                         "id": hit.entity.get("id"),
                         "similarity_score": similarity,
                         "tenant_id": hit.entity.get("tenant_id"),
-                        "metadata": json.loads(hit.entity.get("metadata", "{}")),
+                        "metadata": metadata_value,
                         "created_at": hit.entity.get("created_at"),
                     }
                     
@@ -625,14 +731,35 @@ class SharedMemory:
             )
             
             return processed_results
-            
+        
         except Exception as e:
+            self.metrics.errors_count += 1
+            if self._should_bootstrap_on_error(e):
+                logger.warning(
+                    "Search triggered Milvus bootstrap",
+                    extra={
+                        "collection": collection,
+                        "tenant_id": tenant_id,
+                        "error": str(e),
+                    },
+                )
+                try:
+                    self._ensure_collection_ready(collection)
+                except Exception as bootstrap_error:
+                    logger.error(
+                        "Milvus lazy bootstrap failed",
+                        extra={
+                            "collection": collection,
+                            "tenant_id": tenant_id,
+                            "error": str(bootstrap_error),
+                        },
+                    )
+                return []
+            
             logger.error(
                 f"Search failed in {collection}",
                 extra={"error": str(e), "tenant_id": tenant_id}
             )
-            self.metrics.errors_count += 1
-            # Return empty list for graceful degradation
             return []
     
     def batch_store_knowledge(
@@ -785,7 +912,7 @@ class SharedMemory:
             
             if tenant_id:
                 expr = f"tenant_id == {json.dumps(tenant_id)}"
-                uses_partition_key = any(getattr(field, "is_partition_key", False) for field in collection_obj.schema.fields)
+                uses_partition_key = self._collection_uses_partition_key(collection_obj)
                 query_kwargs = {"output_fields": ["id"], "expr": expr}
 
                 if not uses_partition_key:
@@ -822,7 +949,7 @@ class SharedMemory:
         """
         try:
             collection_obj = self._get_collection(collection)
-            uses_partition_key = any(getattr(field, "is_partition_key", False) for field in collection_obj.schema.fields)
+            uses_partition_key = self._collection_uses_partition_key(collection_obj)
 
             if uses_partition_key:
                 logger.warning(

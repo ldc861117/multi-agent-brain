@@ -162,6 +162,41 @@ The system is configured through environment variables in the `.env` file. See `
 | `OPENAI_RETRY_DELAY` | Initial retry delay | `1.0` |
 | `OPENAI_MAX_RETRY_DELAY` | Maximum retry delay | `60.0` |
 
+### `config.yaml` Essentials
+
+The OpenAgents network now requires a `network` section with explicit transports and workspace mods alongside the LLM `api_config`. A minimal template looks like this:
+
+```yaml
+network:
+  name: "multi-agent-brain"
+  transports:
+    - type: "http"
+      config:
+        port: 8700
+  mods:
+    - name: "openagents.mods.workspace.default"
+      enabled: true
+
+api_config:
+  chat_api:
+    provider: "openai"
+    model: "gpt-3.5-turbo"
+  embedding_api:
+    provider: "openai"
+    model: "text-embedding-3-small"
+    dimension: 1536
+```
+
+Additional keys (gRPC transport, workspace messaging, per-agent overrides, `prompts`) can be customised as needed. Use the bundled validator to confirm your configuration before starting the network:
+
+```bash
+python3 -m utils.config_validator --path config.yaml
+python3 -m utils.config_validator --path config.yaml --repair  # Restore from config.default.yaml
+AUTO_REPAIR_CONFIG=1 ./run_demo.sh           # Non-interactive repair via run_demo
+```
+
+`run_demo.sh` automatically invokes the validator and (with confirmation or `AUTO_REPAIR_CONFIG=1`) can repair missing sections by copying the default template without overwriting your config silently.
+
 ---
 
 ## 📁 Project Structure

@@ -127,6 +127,67 @@ check_env_config() {
         fi
     else
         print_success "config.yaml 文件存在"
+
+        set +e
+        VALIDATION_OUTPUT=$(python3 -m utils.config_validator --path config.yaml --default config.default.yaml 2>&1)
+        VALIDATION_STATUS=$?
+        set -e
+
+        if [[ $VALIDATION_STATUS -ne 0 ]]; then
+            print_error "config.yaml 验证失败，请根据以下输出修复:"
+            echo "$VALIDATION_OUTPUT"
+
+            if [[ -f "config.default.yaml" ]]; then
+                if [[ "${AUTO_REPAIR_CONFIG:-0}" == "1" ]]; then
+                    python3 -m utils.config_validator --path config.yaml --default config.default.yaml --repair
+                    print_success "已从模板修复 config.yaml (原文件已备份)"
+
+                    set +e
+                    VALIDATION_OUTPUT=$(python3 -m utils.config_validator --path config.yaml --default config.default.yaml 2>&1)
+                    VALIDATION_STATUS=$?
+                    set -e
+
+                    if [[ $VALIDATION_STATUS -ne 0 ]]; then
+                        print_error "修复后的 config.yaml 仍未通过验证，请手动检查:"
+                        echo "$VALIDATION_OUTPUT"
+                        exit 1
+                    else
+                        print_success "config.yaml 验证通过"
+                    fi
+                elif [[ -t 0 ]]; then
+                    read -p "是否使用 config.default.yaml 修复 config.yaml？(y/N): " -n 1 -r
+                    echo
+                    if [[ $REPLY =~ ^[Yy]$ ]]; then
+                        python3 -m utils.config_validator --path config.yaml --default config.default.yaml --repair
+                        print_success "已从模板修复 config.yaml (原文件已备份)"
+
+                        set +e
+                        VALIDATION_OUTPUT=$(python3 -m utils.config_validator --path config.yaml --default config.default.yaml 2>&1)
+                        VALIDATION_STATUS=$?
+                        set -e
+
+                        if [[ $VALIDATION_STATUS -ne 0 ]]; then
+                            print_error "修复后的 config.yaml 仍未通过验证，请手动检查:"
+                            echo "$VALIDATION_OUTPUT"
+                            exit 1
+                        else
+                            print_success "config.yaml 验证通过"
+                        fi
+                    else
+                        print_warning "已保留原始 config.yaml，请根据提示手动修复后重试。"
+                        exit 1
+                    fi
+                else
+                    print_warning "检测到非交互式环境。设置 AUTO_REPAIR_CONFIG=1 以自动修复或运行 python3 -m utils.config_validator --repair"
+                    exit 1
+                fi
+            else
+                print_error "config.default.yaml 不存在，无法自动修复 config.yaml。"
+                exit 1
+            fi
+        else
+            print_success "config.yaml 验证通过"
+        fi
     fi
 }
 

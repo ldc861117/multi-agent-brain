@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 import yaml
 from loguru import logger
 
+from .config_validator import ConfigValidator, ConfigValidationError
 from .openai_client import ChatAPIConfig, EmbeddingAPIConfig, OpenAIConfig, ProviderType
 
 
@@ -41,6 +42,7 @@ class ConfigManager:
                     with open(self.config_path, 'r') as f:
                         self._yaml_config = yaml.safe_load(f) or {}
                     logger.info(f"Loaded configuration from {self.config_path}")
+                    self._log_validation_feedback()
                 else:
                     # Try to create from default template
                     self._yaml_config = self._create_config_from_default()
@@ -48,6 +50,7 @@ class ConfigManager:
                         f"Configuration file {self.config_path} not found, "
                         f"created from default template. Please review and customize as needed."
                     )
+                    self._log_validation_feedback()
             except Exception as e:
                 logger.error(f"Failed to load configuration from {self.config_path}: {e}")
                 self._yaml_config = {}
@@ -112,6 +115,34 @@ class ConfigManager:
                 'escalations': {}
             }
         }
+    
+    def _log_validation_feedback(self) -> None:
+        """Run schema validation and log actionable messages."""
+        validator = ConfigValidator(config_path=self.config_path, default_path="config.default.yaml")
+        try:
+            result = validator.validate()
+        except ConfigValidationError as exc:
+            logger.error(f"Configuration validation failed: {exc}")
+            return
+    
+        if not result.is_valid:
+            for issue in result.errors:
+                path = issue.path or "root"
+                logger.error(
+                    "Configuration schema error at {path}: {message}",
+                    path=path,
+                    message=issue.message,
+                )
+            if result.missing_keys:
+                logger.warning(
+                    "Missing configuration keys compared to template: {keys}",
+                    keys=", ".join(sorted(set(result.missing_keys))),
+                )
+        elif result.missing_keys:
+            logger.debug(
+                "Configuration missing optional template keys: {keys}",
+                keys=", ".join(sorted(set(result.missing_keys))),
+            )
     
     def get_global_config(self) -> OpenAIConfig:
         """Get the global OpenAI configuration."""

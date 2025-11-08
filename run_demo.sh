@@ -93,6 +93,7 @@ install_dependencies() {
 check_env_config() {
     print_info "检查环境配置..."
     
+    # 检查 .env 文件
     if [[ ! -f ".env" ]]; then
         if [[ -f ".env.example" ]]; then
             print_warning ".env 文件不存在，从 .env.example 创建..."
@@ -113,6 +114,19 @@ check_env_config() {
         else
             print_warning "CHAT_API_KEY 未配置或为空"
         fi
+    fi
+    
+    # 检查 config.yaml 文件
+    if [[ ! -f "config.yaml" ]]; then
+        if [[ -f "config.default.yaml" ]]; then
+            print_warning "config.yaml 文件不存在，从 config.default.yaml 创建..."
+            cp config.default.yaml config.yaml
+            print_success "已创建 config.yaml，请根据需要自定义配置"
+        else
+            print_warning "config.yaml 和 config.default.yaml 都不存在，将使用内置默认配置"
+        fi
+    else
+        print_success "config.yaml 文件存在"
     fi
 }
 

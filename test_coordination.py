@@ -596,6 +596,344 @@ class TestHandleMessage:
             assert response.metadata["status"] == "error"
 
 
+class TestAnswerSynthesis:
+    """Test answer synthesis with verbose and language support."""
+
+    @pytest.mark.asyncio
+    async def test_synthesize_answer_concise_mode(self, coordination_agent):
+        """Test synthesis in concise mode (default)."""
+        question = "What is Python?"
+        analysis = {"required_experts": ["python"], "complexity": "simple"}
+        expert_responses = {"python": "Python is a programming language."}
+
+        with patch.object(coordination_agent.client, "get_chat_completion") as mock_completion:
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Python is a versatile programming language."
+            mock_completion.return_value = mock_response
+
+            result = await coordination_agent.synthesize_answer(
+                question, analysis, expert_responses, verbose=False
+            )
+
+            # Check that the prompt requests concise answer
+            mock_completion.assert_called_once()
+            call_args = mock_completion.call_args
+            # Should be called with temperature=0.7 and max_tokens=500 for concise mode
+            assert call_args[1]["temperature"] == 0.7
+            assert call_args[1]["max_tokens"] == 500
+
+            assert result == "Python is a versatile programming language."
+
+    @pytest.mark.asyncio
+    async def test_synthesize_answer_verbose_mode(self, coordination_agent):
+        """Test synthesis in verbose mode."""
+        question = "What is Python?"
+        analysis = {"required_experts": ["python"], "complexity": "simple"}
+        expert_responses = {"python": "Python is a programming language."}
+
+        with patch.object(coordination_agent.client, "get_chat_completion") as mock_completion:
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "**Direct Answer:** Python is a programming language.\n\n**Synthesis:** ..."
+            mock_completion.return_value = mock_response
+
+            result = await coordination_agent.synthesize_answer(
+                question, analysis, expert_responses, verbose=True
+            )
+
+            # Check that the prompt requests detailed answer
+            mock_completion.assert_called_once()
+            call_args = mock_completion.call_args
+            # Should be called with temperature=0.7 and max_tokens=1000 for verbose mode
+            assert call_args[1]["temperature"] == 0.7
+            assert call_args[1]["max_tokens"] == 1000
+
+            assert "**Direct Answer:**" in result
+
+    @pytest.mark.asyncio
+    async def test_synthesize_answer_chinese_language(self, coordination_agent):
+        """Test language detection for Chinese."""
+        question = "你好"
+        analysis = {"required_experts": [], "complexity": "simple"}
+        expert_responses = {}
+
+        with patch.object(coordination_agent.client, "get_chat_completion") as mock_completion:
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "你好！很高兴见到你。"
+            mock_completion.return_value = mock_response
+
+            result = await coordination_agent.synthesize_answer(
+                question, analysis, expert_responses, verbose=False
+            )
+
+            # Check that Chinese language instruction is included
+            mock_completion.assert_called_once()
+            # Should be called with language detection result 'zh'
+            # The mock should have been called with the right parameters for Chinese
+            call_args = mock_completion.call_args
+            assert call_args[1]["temperature"] == 0.7
+            # We can't easily check the prompt content due to structure, but we can check it was called correctly
+
+            assert result == "你好！很高兴见到你。"
+
+    @pytest.mark.asyncio
+    async def test_synthesize_answer_spanish_language(self, coordination_agent):
+        """Test language detection for Spanish."""
+        question = "hola"
+        analysis = {"required_experts": [], "complexity": "simple"}
+        expert_responses = {}
+
+        with patch.object(coordination_agent.client, "get_chat_completion") as mock_completion:
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "¡Hola! ¿Cómo estás?"
+            mock_completion.return_value = mock_response
+
+            result = await coordination_agent.synthesize_answer(
+                question, analysis, expert_responses, verbose=False
+            )
+
+            # Check that Spanish language instruction is included
+            mock_completion.assert_called_once()
+            # Should be called with language detection result 'es'
+            # The mock should have been called with the right parameters for Spanish
+            call_args = mock_completion.call_args
+            assert call_args[1]["temperature"] == 0.7
+            # We can't easily check the prompt content due to structure, but we can check it was called correctly
+
+            assert result == "¡Hola! ¿Cómo estás?"
+
+    @pytest.mark.asyncio
+    async def test_synthesize_answer_uses_instance_verbose_default(self, coordination_agent):
+        """Test that synthesize_answer uses instance verbose setting when not overridden."""
+        question = "Test question"
+        analysis = {"required_experts": [], "complexity": "simple"}
+        expert_responses = {}
+
+        # Set instance verbose to True
+        coordination_agent.verbose = True
+
+        with patch.object(coordination_agent.client, "get_chat_completion") as mock_completion:
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Verbose answer"
+            mock_completion.return_value = mock_response
+
+            # Call without verbose parameter - should use instance default
+            await coordination_agent.synthesize_answer(question, analysis, expert_responses)
+
+            # Check that verbose mode is used
+            mock_completion.assert_called_once()
+            call_args = mock_completion.call_args
+            # Should be called with temperature=0.7 and max_tokens=1000 for verbose mode
+            assert call_args[1]["temperature"] == 0.7
+            assert call_args[1]["max_tokens"] == 1000
+
+    @pytest.mark.asyncio
+    async def test_synthesize_answer_fallback_concise(self, coordination_agent):
+        """Test fallback behavior in concise mode when LLM fails."""
+        question = "Test question"
+        analysis = {"required_experts": ["python", "milvus"], "complexity": "complex"}
+        expert_responses = {
+            "python": "Use Python libraries.",
+            "milvus": "Use vector databases."
+        }
+
+        with patch.object(coordination_agent.client, "get_chat_completion", side_effect=Exception("LLM error")):
+            result = await coordination_agent.synthesize_answer(
+                question, analysis, expert_responses, verbose=False
+            )
+
+            # Should concatenate expert responses without scaffolding
+            expected = "Use Python libraries. Use vector databases."
+            assert result == expected
+
+    @pytest.mark.asyncio
+    async def test_synthesize_answer_fallback_verbose(self, coordination_agent):
+        """Test fallback behavior in verbose mode when LLM fails."""
+        question = "Test question"
+        analysis = {"required_experts": ["python"], "complexity": "simple"}
+        expert_responses = {"python": "Python response"}
+
+        with patch.object(coordination_agent.client, "get_chat_completion", side_effect=Exception("LLM error")):
+            result = await coordination_agent.synthesize_answer(
+                question, analysis, expert_responses, verbose=True
+            )
+
+            # Should include question and expert context
+            assert "Q: Test question" in result
+            assert "Expert Perspectives" in result
+            assert "Python response" in result
+
+
+class TestLanguageDetection:
+    """Test language detection functionality."""
+
+    def test_detect_language_chinese(self):
+        """Test detection of Chinese characters."""
+        assert CoordinationAgent._detect_language("你好世界") == "zh"
+        assert CoordinationAgent._detect_language("Hello 你好") == "zh"
+
+    def test_detect_language_english(self):
+        """Test detection of English."""
+        assert CoordinationAgent._detect_language("Hello world") == "en"
+        assert CoordinationAgent._detect_language("What is Python?") == "en"
+
+    def test_detect_language_spanish(self):
+        """Test detection of Spanish."""
+        assert CoordinationAgent._detect_language("hola gracias") == "es"
+        assert CoordinationAgent._detect_language("por favor") == "es"
+
+    def test_detect_language_french(self):
+        """Test detection of French."""
+        assert CoordinationAgent._detect_language("bonjour merci") == "fr"
+        assert CoordinationAgent._detect_language("s'il vous plaît") == "fr"
+
+    def test_detect_language_german(self):
+        """Test detection of German."""
+        assert CoordinationAgent._detect_language("hallo danke") == "de"
+        assert CoordinationAgent._detect_language("bitte") == "de"
+
+    def test_detect_language_japanese(self):
+        """Test detection of Japanese."""
+        assert CoordinationAgent._detect_language("こんにちはありがとう") == "ja"
+
+    def test_detect_language_korean(self):
+        """Test detection of Korean."""
+        assert CoordinationAgent._detect_language("안녕하세요감사합니다") == "ko"
+
+    def test_detect_language_default_english(self):
+        """Test default to English for unknown languages."""
+        assert CoordinationAgent._detect_language("unknown text") == "en"
+        assert CoordinationAgent._detect_language("") == "en"
+
+
+class TestVerboseConfiguration:
+    """Test verbose configuration handling."""
+
+    @pytest.mark.asyncio
+    async def test_handle_message_with_verbose_override(self, coordination_agent):
+        """Test handle_message respects verbose override in message content."""
+        message = {
+            "content": {
+                "text": "Test question",
+                "verbose": True
+            }
+        }
+
+        with patch.object(coordination_agent, "analyze_question") as mock_analyze, patch.object(
+            coordination_agent,
+            "retrieve_similar_knowledge",
+            new_callable=AsyncMock,
+        ) as mock_retrieve, patch.object(
+            coordination_agent,
+            "dispatch_to_experts",
+            new_callable=AsyncMock,
+        ) as mock_dispatch, patch.object(
+            coordination_agent,
+            "synthesize_answer",
+            new_callable=AsyncMock,
+        ) as mock_synthesize, patch.object(
+            coordination_agent,
+            "store_collaboration",
+            new_callable=AsyncMock,
+        ):
+
+            mock_analyze.return_value = {"required_experts": [], "complexity": "simple"}
+            mock_retrieve.return_value = []
+            mock_dispatch.return_value = {
+                "interaction_id": "test-id",
+                "expert_responses": {},
+                "status": "completed",
+            }
+
+            await coordination_agent.handle_message(message)
+
+            # Check that verbose override was passed to synthesize_answer
+            mock_synthesize.assert_called_once()
+            call_kwargs = mock_synthesize.call_args[1]
+            assert call_kwargs["verbose"] is True
+
+    @pytest.mark.asyncio
+    async def test_handle_message_with_verbose_in_metadata(self, coordination_agent):
+        """Test handle_message respects verbose override in metadata."""
+        message = {
+            "content": {"text": "Test question"},
+            "metadata": {"verbose": False}
+        }
+
+        with patch.object(coordination_agent, "analyze_question") as mock_analyze, patch.object(
+            coordination_agent,
+            "retrieve_similar_knowledge",
+            new_callable=AsyncMock,
+        ) as mock_retrieve, patch.object(
+            coordination_agent,
+            "dispatch_to_experts",
+            new_callable=AsyncMock,
+        ) as mock_dispatch, patch.object(
+            coordination_agent,
+            "synthesize_answer",
+            new_callable=AsyncMock,
+        ) as mock_synthesize, patch.object(
+            coordination_agent,
+            "store_collaboration",
+            new_callable=AsyncMock,
+        ):
+
+            mock_analyze.return_value = {"required_experts": [], "complexity": "simple"}
+            mock_retrieve.return_value = []
+            mock_dispatch.return_value = {
+                "interaction_id": "test-id",
+                "expert_responses": {},
+                "status": "completed",
+            }
+
+            await coordination_agent.handle_message(message)
+
+            # Check that verbose override from metadata was passed
+            mock_synthesize.assert_called_once()
+            call_kwargs = mock_synthesize.call_args[1]
+            assert call_kwargs["verbose"] is False
+
+    @pytest.mark.asyncio
+    async def test_handle_message_uses_instance_verbose_when_no_override(self, coordination_agent):
+        """Test handle_message uses instance verbose when no override provided."""
+        message = {"content": {"text": "Test question"}}
+
+        # Set instance verbose to a specific value
+        coordination_agent.verbose = True
+
+        with patch.object(coordination_agent, "analyze_question") as mock_analyze, patch.object(
+            coordination_agent,
+            "retrieve_similar_knowledge",
+            new_callable=AsyncMock,
+        ) as mock_retrieve, patch.object(
+            coordination_agent,
+            "dispatch_to_experts",
+            new_callable=AsyncMock,
+        ) as mock_dispatch, patch.object(
+            coordination_agent,
+            "synthesize_answer",
+            new_callable=AsyncMock,
+        ) as mock_synthesize, patch.object(
+            coordination_agent,
+            "store_collaboration",
+            new_callable=AsyncMock,
+        ):
+
+            mock_analyze.return_value = {"required_experts": [], "complexity": "simple"}
+            mock_retrieve.return_value = []
+            mock_dispatch.return_value = {
+                "interaction_id": "test-id",
+                "expert_responses": {},
+                "status": "completed",
+            }
+
+            await coordination_agent.handle_message(message)
+
+            # Check that synthesize_answer was called with None (will use instance default)
+            mock_synthesize.assert_called_once()
+            call_kwargs = mock_synthesize.call_args[1]
+            assert call_kwargs["verbose"] is None
+
+
 class TestMessageExtraction:
     """Test message content extraction."""
 

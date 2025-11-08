@@ -19,7 +19,7 @@ from loguru import logger
 
 from agents.base import AgentResponse, BaseAgent
 from agents.shared_memory import SharedMemory
-from utils import get_agent_config, get_openai_client, OpenAIClientWrapper
+from utils import get_agent_config, get_agent_answer_verbose, get_openai_client, OpenAIClientWrapper
 
 
 class CoordinationAgent(BaseAgent):
@@ -119,6 +119,9 @@ class CoordinationAgent(BaseAgent):
         agent_config = get_agent_config(self.name)
         self.client = OpenAIClientWrapper(config=agent_config)
         
+        # Get verbose setting from config
+        self.verbose = get_agent_answer_verbose(self.name)
+        
         self.memory = SharedMemory(agent_name=self.name)
         self.logger = logger.bind(agent_id="coordination")
 
@@ -132,7 +135,7 @@ class CoordinationAgent(BaseAgent):
         # Cache for active collaboration tasks
         self.active_collaborations: Dict[str, Dict[str, Any]] = {}
 
-        self.logger.info("CoordinationAgent initialized")
+        self.logger.info("CoordinationAgent initialized", extra={"verbose": self.verbose})
 
     @staticmethod
     def _normalize_expert_label(label: Any) -> Optional[str]:
@@ -182,6 +185,44 @@ class CoordinationAgent(BaseAgent):
                 break
 
         return keywords or tokens[:limit]
+
+    @staticmethod
+    def _detect_language(text: str) -> str:
+        """Detect the language of the input text.
+        
+        Parameters
+        ----------
+        text : str
+            Input text to analyze
+            
+        Returns
+        -------
+        str
+            Detected language code ('en', 'zh', 'es', etc.)
+        """
+        # Simple heuristic language detection
+        text = text.strip().lower()
+        
+        # Chinese characters detection
+        if any('\u4e00' <= char <= '\u9fff' for char in text):
+            return 'zh'
+        
+        # Common non-English indicators
+        non_english_patterns = {
+            'es': [r'\b(hola|gracias|por favor)\b'],
+            'fr': [r'\b(bonjour|merci|s\'il vous plaît)\b'],
+            'de': [r'\b(hallo|danke|bitte)\b'],
+            'ja': [r'(こんにちは|ありがとう|お願いします)'],
+            'ko': [r'(안녕하세요|감사합니다|제발)'],
+        }
+        
+        import re
+        for lang, patterns in non_english_patterns.items():
+            if any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns):
+                return lang
+        
+        # Default to English
+        return 'en'
 
     def _determine_complexity(
         self,
@@ -351,22 +392,22 @@ class CoordinationAgent(BaseAgent):
         question = question.strip()
         templates = {
             "python": (
-                f"As the Python expert, consider tackling '{question}' by:\n"
-                "- Identifying the core language features involved (asyncio, typing, performance).\n"
-                "- Highlighting tooling or libraries that directly address the request.\n"
-                "- Providing concrete steps the user can follow immediately."
+                f"For '{question}', focus on Python best practices:\n"
+                "• Use appropriate language features and libraries\n"
+                "• Follow clean code principles\n"
+                "• Include error handling and testing considerations"
             ),
             "milvus": (
-                f"As the Milvus expert, address '{question}' by focusing on:\n"
-                "- Collection and partition design for the workload.\n"
-                "- Appropriate index selection and parameter tuning.\n"
-                "- Operational safeguards such as replication, backups, and monitoring."
+                f"For '{question}', consider these Milvus aspects:\n"
+                "• Design collections and partitions for your use case\n"
+                "• Choose the right index type and parameters\n"
+                "• Implement monitoring and backup strategies"
             ),
             "devops": (
-                f"From a DevOps perspective, respond to '{question}' by covering:\n"
-                "- Automation workflows (CI/CD, infrastructure-as-code).\n"
-                "- Observability, monitoring, and rollback strategies.\n"
-                "- Security and compliance considerations for the deployment pipeline."
+                f"For '{question}', key DevOps considerations:\n"
+                "• Automate deployment and infrastructure management\n"
+                "• Implement monitoring and observability\n"
+                "• Focus on security, scalability, and reliability"
             ),
         }
 
@@ -651,19 +692,19 @@ Guidelines:
 
         expert_prompts = {
             "python": (
-                "You are a Python programming expert. Answer the following question "
+                "You are a Python programming expert. Provide direct, practical answers "
                 "about Python development, best practices, and code solutions. "
-                "Be concise and practical."
+                "Avoid meta-commentary about being an expert. Focus on actionable guidance."
             ),
             "milvus": (
-                "You are a Milvus vector database expert. Answer questions about "
+                "You are a Milvus vector database expert. Give direct answers about "
                 "vector databases, Milvus operations, and best practices. "
-                "Focus on performance and practical implementation."
+                "Focus on performance and practical implementation without scaffolding."
             ),
             "devops": (
-                "You are a DevOps and infrastructure expert. Answer questions about "
-                "deployment, scalability, monitoring, and operational excellence. "
-                "Provide practical recommendations."
+                "You are a DevOps and infrastructure expert. Provide direct recommendations "
+                "about deployment, scalability, monitoring, and operational excellence. "
+                "Be practical and avoid process explanations."
             ),
         }
 
@@ -692,6 +733,7 @@ Guidelines:
         analysis: Dict[str, Any],
         expert_responses: Dict[str, str],
         tenant_id: str = "default",
+        verbose: Optional[bool] = None,
     ) -> str:
         """Synthesize expert responses into a cohesive final answer.
 
@@ -705,18 +747,41 @@ Guidelines:
             Responses from expert agents.
         tenant_id : str, optional
             Tenant ID for multi-tenant isolation, by default "default".
+        verbose : bool, optional
+            Whether to include detailed meta-sections. If None, uses self.verbose setting.
 
         Returns
         -------
         str
             Synthesized final answer.
         """
+        # Use provided verbose setting or fall back to instance default
+        is_verbose = verbose if verbose is not None else self.verbose
+        
+        # Detect user's language for response
+        user_language = self._detect_language(question)
+        
         # Build expert context
         expert_context = ""
         for expert, response in expert_responses.items():
             expert_context += f"\n【{expert.upper()} Expert Opinion】\n{response}\n"
 
-        synthesis_prompt = f"""
+        # Create language-specific prompts
+        language_instructions = {
+            'zh': "请用中文回答，保持简洁明了。",
+            'es': "Responde en español de manera clara y concisa.",
+            'fr': "Réponds en français de manière claire et concise.",
+            'de': "Antworte auf Deutsch klar und prägnant.",
+            'ja': "日本語で明確かつ簡潔に答えてください。",
+            'ko': "한국어로 명확하고 간결하게 답변해주세요.",
+            'en': "Respond in clear, concise English."
+        }
+        
+        language_instruction = language_instructions.get(user_language, language_instructions['en'])
+
+        if is_verbose:
+            # Verbose mode with meta-sections
+            synthesis_prompt = f"""
 Based on the following expert opinions, synthesize a comprehensive answer:
 
 【User Question】
@@ -729,13 +794,37 @@ Required Experts: {', '.join(analysis.get('required_experts', []))}
 【Expert Opinions】
 {expert_context}
 
-Please provide:
-1. A clear, concise final answer addressing the user's question
-2. Synthesis of different expert perspectives
-3. Key recommendations or action items
-4. Any trade-offs or considerations the user should know about
+Language instruction: {language_instruction}
 
-Format the answer in a clear, structured way.
+Please provide:
+1. **Direct Answer**: A clear, concise final answer addressing the user's question
+2. **Synthesis of Expert Perspectives**: Brief summary of how different expert views complement each other
+3. **Key Recommendations**: Actionable next steps or best practices
+4. **Important Considerations**: Trade-offs, risks, or additional factors to consider
+
+Format with clear headings for each section.
+"""
+        else:
+            # Concise mode - only the direct answer
+            synthesis_prompt = f"""
+Based on the following expert opinions, provide a direct answer to the user's question:
+
+【User Question】
+{question}
+
+【Expert Opinions】
+{expert_context}
+
+Language instruction: {language_instruction}
+
+Requirements:
+- Provide ONLY the direct answer to the user's question
+- Do not include headings, meta-commentary, or explanations of your process
+- Be conversational and natural
+- Keep it concise but complete
+- Respond in the same language as the user's question
+
+Direct Answer:
 """
 
         try:
@@ -744,30 +833,39 @@ Format the answer in a clear, structured way.
                     {
                         "role": "system",
                         "content": (
-                            "You are an expert synthesizer. Combine multiple expert "
-                            "perspectives into a clear, actionable answer."
+                            "You are an expert synthesizer. "
+                            "Combine multiple expert perspectives into clear, actionable answers. "
+                            "Always match the user's language and requested verbosity level."
                         ),
                     },
                     {"role": "user", "content": synthesis_prompt},
                 ],
                 temperature=0.7,
-                max_tokens=1000,
+                max_tokens=1000 if is_verbose else 500,
             )
 
             final_answer = response.choices[0].message.content
 
             self.logger.info(
                 "Answer synthesized",
-                extra={"answer_length": len(final_answer)},
+                extra={
+                    "answer_length": len(final_answer),
+                    "verbose": is_verbose,
+                    "language": user_language,
+                },
             )
 
-            return final_answer
+            return final_answer.strip()
 
         except Exception as e:
             self.logger.error(f"Failed to synthesize answer: {e}")
-            # Fallback: concatenate expert responses
-            fallback = f"Q: {question}\n\nExpert Perspectives:{expert_context}"
-            return fallback
+            # Fallback: concatenate expert responses without scaffolding
+            if is_verbose:
+                fallback = f"Q: {question}\n\nExpert Perspectives:{expert_context}"
+            else:
+                # Simple fallback for concise mode
+                fallback = " ".join([response.strip() for response in expert_responses.values()])
+            return fallback.strip()
 
     async def store_collaboration(
         self,
@@ -873,6 +971,12 @@ Format the answer in a clear, structured way.
             message_content = self._extract_message_content(message)
             question = message_content.get("text", "")
             tenant_id = message_content.get("tenant_id", "default")
+            
+            # Check for verbose override in message
+            verbose_override = message_content.get("verbose")
+            if verbose_override is None:
+                # Check metadata as fallback
+                verbose_override = message.get("metadata", {}).get("verbose")
 
             if not question or not question.strip():
                 return AgentResponse(
@@ -921,6 +1025,7 @@ Format the answer in a clear, structured way.
                 analysis,
                 dispatch_result["expert_responses"],
                 tenant_id,
+                verbose=verbose_override,
             )
 
             # Store collaboration

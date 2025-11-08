@@ -396,12 +396,29 @@ def main(mode: str, config: str):
       python demo_runner.py --mode automated         # 自动化模式
       python demo_runner.py --mode benchmark         # 性能测试
     """
-    # Configure logging
+    # Configure logging with default agent_id for records that don't have it
+    def add_default_agent_id(record):
+        """Add default agent_id to log records that don't have one."""
+        # Check if agent_id is in the top-level extra (from .bind())
+        if "agent_id" in record["extra"]:
+            return True
+        
+        # Check if agent_id is in nested extra (from .info(..., extra={...}))
+        if "extra" in record["extra"] and "agent_id" in record["extra"]["extra"]:
+            # Promote it to top-level for the format string
+            record["extra"]["agent_id"] = record["extra"]["extra"]["agent_id"]
+            return True
+        
+        # No agent_id found, set default
+        record["extra"]["agent_id"] = "system"
+        return True
+    
     logger.remove()
     logger.add(
         sys.stderr,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[agent_id]}</cyan> | <level>{message}</level>",
-        level="INFO"
+        level="INFO",
+        filter=add_default_agent_id
     )
     
     # Run demo

@@ -42,13 +42,76 @@ class ConfigManager:
                         self._yaml_config = yaml.safe_load(f) or {}
                     logger.info(f"Loaded configuration from {self.config_path}")
                 else:
-                    self._yaml_config = {}
-                    logger.warning(f"Configuration file {self.config_path} not found, using defaults")
+                    # Try to create from default template
+                    self._yaml_config = self._create_config_from_default()
+                    logger.warning(
+                        f"Configuration file {self.config_path} not found, "
+                        f"created from default template. Please review and customize as needed."
+                    )
             except Exception as e:
                 logger.error(f"Failed to load configuration from {self.config_path}: {e}")
                 self._yaml_config = {}
         
         return self._yaml_config
+    
+    def _create_config_from_default(self) -> Dict[str, Any]:
+        """Create configuration from default template if config.yaml is missing.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Default configuration loaded from config.default.yaml or hardcoded defaults.
+        """
+        default_config_path = "config.default.yaml"
+        
+        # Try to load from default template
+        if os.path.exists(default_config_path):
+            try:
+                with open(default_config_path, 'r') as f:
+                    default_config = yaml.safe_load(f) or {}
+                logger.info(f"Loaded default configuration from {default_config_path}")
+                
+                # Create config.yaml from default template (non-destructive operation)
+                try:
+                    with open(self.config_path, 'w') as f:
+                        yaml.dump(default_config, f, default_flow_style=False, indent=2)
+                    logger.info(f"Created {self.config_path} from default template")
+                except Exception as e:
+                    logger.warning(f"Failed to create {self.config_path}: {e}")
+                
+                return default_config
+            except Exception as e:
+                logger.error(f"Failed to load default configuration from {default_config_path}: {e}")
+        
+        # Fallback to hardcoded minimal configuration
+        logger.warning("Using hardcoded minimal configuration as fallback")
+        return {
+            'api_config': {
+                'chat_api': {
+                    'provider': 'openai',
+                    'model': 'gpt-3.5-turbo',
+                    'timeout': 30,
+                    'max_retries': 3,
+                    'retry_delay': 1.0,
+                    'max_retry_delay': 60.0,
+                },
+                'embedding_api': {
+                    'provider': 'openai',
+                    'model': 'text-embedding-3-small',
+                    'dimension': 1536,
+                    'timeout': 30,
+                    'max_retries': 3,
+                    'retry_delay': 1.0,
+                    'max_retry_delay': 60.0,
+                },
+                'agent_overrides': {}
+            },
+            'channels': {},
+            'routing': {
+                'default_target': 'general',
+                'escalations': {}
+            }
+        }
     
     def get_global_config(self) -> OpenAIConfig:
         """Get the global OpenAI configuration."""

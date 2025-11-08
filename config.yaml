@@ -1,0 +1,102 @@
+# Working configuration for Multi-Agent Brain
+# Chat API: https://api.metamirror.club/v1 with gemini-2.5-flash
+# Embedding API: Local Ollama with qwen3-embedding:0.6b
+
+# API Configuration
+api_config:
+  # Global default Chat API configuration
+  chat_api:
+    provider: "custom"  # Using metamirror.club as custom provider
+    model: "gemini-2.5-flash"
+    timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+    max_retry_delay: 60.0
+  
+  # Global default Embedding API configuration
+  embedding_api:
+    provider: "ollama"  # Local Ollama for embeddings
+    model: "qwen3-embedding:0.6b"
+    dimension: 768  # qwen3-embedding:0.6b typically uses 768 dimensions
+    timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+    max_retry_delay: 60.0
+  
+  # Per-agent model overrides
+  agent_overrides:
+    coordination:
+      chat_model: "gemini-2.5-flash"
+      embedding_model: "qwen3-embedding:0.6b"
+      embedding_dimension: 768
+      answer_verbose: false  # Default to concise mode
+    python_expert:
+      chat_model: "gemini-2.5-flash"
+      embedding_model: "qwen3-embedding:0.6b"
+      embedding_dimension: 768
+      answer_verbose: false
+    milvus_expert:
+      chat_model: "gemini-2.5-flash"
+      embedding_model: "qwen3-embedding:0.6b"
+      embedding_dimension: 768
+      answer_verbose: false
+    devops_expert:
+      chat_model: "gemini-2.5-flash"
+      embedding_model: "qwen3-embedding:0.6b"
+      embedding_dimension: 768
+      answer_verbose: false
+
+# Network channels configuration
+channels:
+  coordination:
+    description: "Multi-agent coordination and orchestration"
+    entrypoint: agents.coordination:CoordinationAgent
+    visibility: internal
+    targets:
+      - python_expert
+      - milvus_expert
+      - devops_expert
+      - general
+
+  python_expert:
+    description: "Python programming expert agent"
+    entrypoint: agents.python_expert:PythonExpertAgent
+    visibility: internal
+
+  milvus_expert:
+    description: "Milvus vector database expert agent"
+    entrypoint: agents.milvus_expert:MilvusExpertAgent
+    visibility: internal
+
+  devops_expert:
+    description: "DevOps and infrastructure expert agent"
+    entrypoint: agents.devops_expert:DevOpsExpertAgent
+    visibility: internal
+
+  general:
+    description: "General purpose agent for basic queries"
+    entrypoint: agents.general:GeneralAgent
+    visibility: public
+
+# Message routing configuration
+routing:
+  default_target: general
+  escalations:
+    coordination:
+      - python_expert
+      - milvus_expert
+      - devops_expert
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} | {message}"
+  rotation: "100 MB"
+  retention: "30 days"
+
+# Performance settings
+performance:
+  max_concurrent_requests: 10
+  request_timeout: 60
+  cache_size: 1000
+  cache_ttl: 3600  # seconds

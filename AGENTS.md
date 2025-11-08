@@ -50,6 +50,34 @@ curl http://localhost:8700/health
 http://localhost:8050
 ```
 
+## 3.1. Milvus 设置（必需）
+
+Milvus 向量数据库是系统的核心组件，必须先启动才能运行。
+
+### 选项 1: Docker (推荐)
+```bash
+# 启动 Milvus 容器
+docker run -d -p 19530:19530 milvusdb/milvus:latest
+
+# 验证连接
+curl http://localhost:19530/health
+```
+
+### 选项 2: Milvus Cloud
+```bash
+# 注册并获取连接端点
+# 访问: https://cloud.zilliz.com/
+# 配置: MILVUS_URI=https://your-endpoint.zillizcloud.com
+```
+
+### 选项 3: 本地安装
+```bash
+# 参考: https://milvus.io/docs/install_standalone-docker.md
+# 本地安装需要更多配置，不推荐新手使用
+```
+
+**重要**: Milvus URI 必须是 HTTP(S) 格式，不支持文件路径。
+
 ## 4. 文件导航快速查询表
 
 **格式：任务 → 文件 → 主要方法 → 注意事项**
@@ -614,8 +642,13 @@ EMBEDDING_API_MAX_RETRIES=3
 EMBEDDING_API_RETRY_DELAY=1.0
 EMBEDDING_API_MAX_RETRY_DELAY=60.0
 
-# Milvus
-MILVUS_URI=./multi_agent_memory.db
+# Milvus (Required)
+# For local development with Docker:
+# docker run -d -p 19530:19530 milvusdb/milvus:latest
+MILVUS_URI=http://localhost:19530
+
+# Alternative: Milvus Cloud or remote server
+# MILVUS_URI=https://your-milvus-cloud-endpoint.zillizcloud.com
 
 # 兼容性配置（向后兼容）
 OPENAI_API_KEY=sk-xxx

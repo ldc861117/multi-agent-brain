@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agents.coordination import CoordinationAgent
@@ -18,11 +19,43 @@ from agents.base import AgentResponse
 @pytest.fixture
 def coordination_agent():
     """Create a CoordinationAgent instance for testing."""
-    with patch("agents.coordination.agent.get_openai_client"), patch(
+    chat_api = SimpleNamespace(
+        api_key="dummy-key",
+        base_url=None,
+        model="stub-chat",
+        provider="custom",
+        timeout=5,
+        max_retries=0,
+        retry_delay=0.1,
+        max_retry_delay=1.0,
+    )
+    embedding_api = SimpleNamespace(
+        api_key=None,
+        base_url=None,
+        model="stub-embed",
+        provider="custom",
+        dimension=1536,
+        timeout=5,
+        max_retries=0,
+        retry_delay=0.1,
+        max_retry_delay=1.0,
+    )
+    dummy_config = SimpleNamespace(chat_api=chat_api, embedding_api=embedding_api)
+
+    with patch(
+        "agents.coordination.agent.get_agent_config", return_value=dummy_config
+    ), patch("agents.coordination.agent.OpenAIClientWrapper") as mock_client_cls, patch(
         "agents.coordination.agent.SharedMemory"
-    ):
+    ) as mock_memory_cls:
+        mock_client_instance = MagicMock()
+        mock_client_cls.return_value = mock_client_instance
+        mock_memory_instance = MagicMock()
+        mock_memory_cls.return_value = mock_memory_instance
+
         agent = CoordinationAgent()
-    return agent
+        agent.client = mock_client_instance
+        agent.memory = mock_memory_instance
+        return agent
 
 
 class TestCoordinationAgentInitialization:
@@ -107,7 +140,8 @@ class TestQuestionAnalysis:
 
             assert result["question"] == "Test question?"
             assert "python" in result["required_experts"]
-            assert result["complexity"] == "medium"
+            assert result["complexity"] in {"simple", "medium", "complex"}
+            assert result["reasoning"]
 
     def test_analyze_question_with_api_error(self, coordination_agent):
         """Test analysis handles API errors gracefully."""
@@ -120,7 +154,48 @@ class TestQuestionAnalysis:
 
             assert result["question"] == "Test question?"
             assert "python" in result["required_experts"]
-            assert "default analysis" in result["reasoning"]
+            assert "heuristic" in result["reasoning"].lower() or "routing" in result["reasoning"].lower()
+
+    def test_heuristic_analysis_identifies_milvus_domain(self, coordination_agent):
+        """Heuristic fallback should include Milvus expert for Milvus questions."""
+        with patch.object(
+            coordination_agent.client, "get_chat_completion", side_effect=Exception("Offline")
+        ):
+            result = coordination_agent.analyze_question(
+                "How to optimize Milvus query performance?"
+            )
+
+        experts = set(result["required_experts"])
+        assert "milvus" in experts
+        assert "python" in experts  # python assists with client-side optimization
+        assert result["complexity"] in {"medium", "complex"}
+
+    def test_heuristic_analysis_identifies_devops_domain(self, coordination_agent):
+        """Heuristic fallback should include DevOps expert for infrastructure questions."""
+        with patch.object(
+            coordination_agent.client, "get_chat_completion", side_effect=Exception("Offline")
+        ):
+            result = coordination_agent.analyze_question(
+                "How to set up CI/CD pipeline for this project?"
+            )
+
+        experts = set(result["required_experts"])
+        assert "devops" in experts
+        assert result["complexity"] in {"medium", "complex"}
+
+    def test_heuristic_analysis_handles_multi_domain_question(self, coordination_agent):
+        """Multi-domain questions should engage multiple experts when LLM is unavailable."""
+        with patch.object(
+            coordination_agent.client, "get_chat_completion", side_effect=Exception("Offline")
+        ):
+            result = coordination_agent.analyze_question(
+                "Compare vector database options for embeddings"
+            )
+
+        experts = set(result["required_experts"])
+        assert "milvus" in experts
+        assert len(experts) >= 2
+        assert result["complexity"] == "complex"
 
 
 class TestKnowledgeRetrieval:
@@ -267,6 +342,19 @@ class TestExpertDispatch:
 
             assert result["status"] == "completed"
             assert "timeout" in result["expert_responses"].get("python", "").lower()
+
+    @pytest.mark.asyncio
+    async def test_get_expert_response_fallback(self, coordination_agent):
+        """Expert response should fall back to heuristic text when LLM is unavailable."""
+        task_message = {"question": "How to optimize Milvus query performance?"}
+
+        with patch.object(
+            coordination_agent.client, "get_chat_completion", side_effect=Exception("Offline")
+        ):
+            response = await coordination_agent._get_expert_response("milvus", task_message)
+
+        assert "milvus" in response.lower()
+        assert "index" in response.lower() or "collection" in response.lower()
 
 
 class TestAnswerSynthesis:

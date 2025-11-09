@@ -664,42 +664,62 @@ OPENAI_MAX_RETRY_DELAY=60.0
 
 ### 10.2 网络配置（config.yaml）
 
+1. **Network + Workspace 必须项**（OpenAgents 启动依赖）
+
 ```yaml
-# API 配置
+network:
+  name: "multi-agent-brain"
+  transports:
+    - type: "http"
+      config:
+        port: 8700
+    - type: "grpc"
+      config:
+        port: 8600
+  mods:
+    - name: "openagents.mods.workspace.messaging"
+      enabled: true
+    - name: "openagents.mods.workspace.default"
+      enabled: true
+
+network_profile:
+  discoverable: false
+  host: "127.0.0.1"
+  port: 8700
+
+log_level: "INFO"
+data_dir: "./data/multi-agent-brain"
+```
+
+2. **LLM API 配置（必需） + Agent 覆盖（可选）**
+
+```yaml
 api_config:
-  # 全局默认 Chat API
   chat_api:
-    provider: "openai"  # openai, ollama, custom
+    provider: "openai"
     model: "gpt-3.5-turbo"
     timeout: 30
     max_retries: 3
     retry_delay: 1.0
     max_retry_delay: 60.0
-  
-  # 全局默认 Embedding API
   embedding_api:
-    provider: "openai"  # openai, ollama, custom
+    provider: "openai"
     model: "text-embedding-3-small"
     dimension: 1536
     timeout: 30
     max_retries: 3
     retry_delay: 1.0
     max_retry_delay: 60.0
-  
-  # Agent 特定覆盖（可选）
   agent_overrides:
     coordination:
       chat_model: "gpt-4"
       embedding_model: "text-embedding-3-large"
       embedding_dimension: 3072
-    python_expert:
-      chat_model: "gpt-4"
-    milvus_expert:
-      chat_model: "gpt-3.5-turbo"
-    devops_expert:
-      chat_model: "gpt-3.5-turbo"
+```
 
-# 添加新 channel
+3. **Channels & Routing（示例）**
+
+```yaml
 channels:
   my_new_channel:
     description: "My custom agent channel"
@@ -708,7 +728,6 @@ channels:
     targets:
       - coordination
 
-# 路由配置
 routing:
   default_target: general
   escalations:
@@ -716,9 +735,17 @@ routing:
       - python_expert
       - milvus_expert
       - devops_expert
-      - my_new_channel  # 新增
+      - my_new_channel
 ```
 
+4. **验证 / 修复命令**（复制即用）
+
+```bash
+python3 -m utils.config_validator --path config.yaml
+python3 -m utils.config_validator --path config.yaml --repair  # 复制 config.default.yaml 并创建备份
+```
+
+> 提示：`run_demo.sh` 会自动调用验证器，缺失关键字段时会显示差异并询问是否修复；在非交互环境中设置 `AUTO_REPAIR_CONFIG=1` 可自动修复。`prompts` 部分可选，用于指向自定义系统提示文件。
 ## 11. 常用命令速查表
 
 ```bash

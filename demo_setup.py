@@ -10,6 +10,8 @@ from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from loguru import logger
 
+from utils import ConfigValidator, ConfigValidationError
+
 # Load environment variables at module import
 load_dotenv()
 
@@ -188,48 +190,49 @@ def check_agent_imports() -> bool:
 def check_config_file() -> bool:
     """Check if config.yaml exists and is valid."""
     config_file = Path("config.yaml")
+    default_file = Path("config.default.yaml")
     
     if not config_file.exists():
         print("❌ config.yaml 文件不存在")
         return False
     
+    validator = ConfigValidator(config_path=config_file, default_path=default_file)
+    try:
+        result = validator.validate()
+    except ConfigValidationError as error:
+        print(f"❌ config.yaml 验证失败: {error}")
+        return False
+    
+    if not result.is_valid:
+        print("❌ config.yaml 配置缺失或无效:")
+        for issue in result.errors:
+            location = f" ({issue.path})" if issue.path else ""
+            print(f"  • {issue.message}{location}")
+        if result.missing_keys:
+            print("⚠️  缺少以下关键配置键 (与 config.default.yaml 对比):")
+            for key in sorted(set(result.missing_keys)):
+                print(f"     - {key}")
+        for suggestion in result.suggestions:
+            print(f"💡 {suggestion}")
+        return False
+    
     try:
         import yaml
-        
-        with open(config_file, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        
-        # Check required sections
-        required_sections = ["channels", "network"]
-        missing_sections = []
-        
-        for section in required_sections:
-            if section not in config:
-                missing_sections.append(section)
-        
-        if missing_sections:
-            print(f"❌ config.yaml 缺少必需的配置节: {', '.join(missing_sections)}")
-            return False
-        
-        # Check agent channels
-        channels = config.get("channels", {})
-        required_agents = ["coordination", "python_expert", "milvus_expert", "devops_expert"]
-        missing_agents = []
-        
-        for agent in required_agents:
-            if agent not in channels:
-                missing_agents.append(agent)
-        
-        if missing_agents:
-            print(f"❌ config.yaml 缺少必需的 agent 配置: {', '.join(missing_agents)}")
-            return False
-        
-        print("✅ config.yaml 配置检查通过")
-        return True
-        
-    except Exception as e:
-        print(f"❌ config.yaml 解析失败: {e}")
+        with config_file.open("r", encoding="utf-8") as handle:
+            loaded_config = yaml.safe_load(handle) or {}
+    except Exception as exc:
+        print(f"❌ config.yaml 解析失败: {exc}")
         return False
+    
+    channels = loaded_config.get("channels", {})
+    required_agents = ["coordination", "python_expert", "milvus_expert", "devops_expert"]
+    missing_agents = [agent for agent in required_agents if agent not in channels]
+    if missing_agents:
+        print(f"❌ config.yaml 缺少必需的 agent 配置: {', '.join(missing_agents)}")
+        return False
+    
+    print("✅ config.yaml 配置检查通过")
+    return True
 
 
 def check_file_permissions() -> bool:

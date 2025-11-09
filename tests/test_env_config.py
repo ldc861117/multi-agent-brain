@@ -553,8 +553,8 @@ class TestEdgeCases:
         
         config = ChatAPIConfig.from_env()
         
-        # Whitespace should be preserved (config doesn't auto-trim)
-        assert config.base_url == "  https://api.openai.com/v1/  "
+        # Whitespace should be trimmed to avoid malformed URLs
+        assert config.base_url == "https://api.openai.com/v1/"
     
     def test_case_sensitivity_of_provider_names(self, clean_env, mock_load_dotenv):
         """Test case sensitivity of provider names."""

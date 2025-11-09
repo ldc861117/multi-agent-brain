@@ -19,7 +19,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import openai
 from dotenv import load_dotenv
@@ -37,6 +37,30 @@ class ProviderType(str, Enum):
     CUSTOM = "custom"
 
 
+def _get_env_value(primary: str, fallback_names: Tuple[str, ...] = (), default: Optional[str] = None) -> Optional[str]:
+    """Retrieve environment variable preserving empty strings.
+
+    Parameters
+    ----------
+    primary:
+        Primary environment variable name.
+    fallback_names:
+        Additional environment variable names to evaluate when the primary is unset.
+    default:
+        Default value to return when neither primary nor fallbacks are defined.
+    """
+    value = os.getenv(primary)
+    if value is not None:
+        return value
+
+    for name in fallback_names:
+        fallback_value = os.getenv(name)
+        if fallback_value is not None:
+            return fallback_value
+
+    return default
+
+
 @dataclass
 class ChatAPIConfig:
     """Configuration for chat completion API."""
@@ -51,17 +75,21 @@ class ChatAPIConfig:
     max_retry_delay: float = 60.0
     
     @classmethod
-    def from_env(cls) -> ChatAPIConfig:
+    def from_env(cls, *, load_env: bool = True) -> "ChatAPIConfig":
         """Load chat API configuration from environment variables."""
-        load_dotenv()
+        if load_env:
+            load_dotenv()
         
-        api_key = os.getenv("CHAT_API_KEY") or os.getenv("OPENAI_API_KEY")
+        api_key = _get_env_value("CHAT_API_KEY", ("OPENAI_API_KEY",))
         if not api_key:
             raise ValueError("CHAT_API_KEY or OPENAI_API_KEY environment variable is required")
         
-        base_url = os.getenv("CHAT_API_BASE_URL") or os.getenv("OPENAI_BASE_URL")
-        model = os.getenv("CHAT_API_MODEL") or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-        provider_str = os.getenv("CHAT_API_PROVIDER", "openai")
+        base_url = _get_env_value("CHAT_API_BASE_URL", ("OPENAI_BASE_URL",))
+        if base_url is not None:
+            base_url = base_url.strip()
+        
+        model = _get_env_value("CHAT_API_MODEL", ("OPENAI_MODEL",), "gpt-3.5-turbo")
+        provider_str = _get_env_value("CHAT_API_PROVIDER", default="openai") or "openai"
         
         try:
             provider = ProviderType(provider_str)
@@ -74,10 +102,10 @@ class ChatAPIConfig:
             base_url=base_url,
             model=model,
             provider=provider,
-            timeout=int(os.getenv("CHAT_API_TIMEOUT", "30")),
-            max_retries=int(os.getenv("CHAT_API_MAX_RETRIES", "3")),
-            retry_delay=float(os.getenv("CHAT_API_RETRY_DELAY", "1.0")),
-            max_retry_delay=float(os.getenv("CHAT_API_MAX_RETRY_DELAY", "60.0")),
+            timeout=int(_get_env_value("CHAT_API_TIMEOUT", default="30") or 30),
+            max_retries=int(_get_env_value("CHAT_API_MAX_RETRIES", default="3") or 3),
+            retry_delay=float(_get_env_value("CHAT_API_RETRY_DELAY", default="1.0") or 1.0),
+            max_retry_delay=float(_get_env_value("CHAT_API_MAX_RETRY_DELAY", default="60.0") or 60.0),
         )
 
 
@@ -96,14 +124,18 @@ class EmbeddingAPIConfig:
     max_retry_delay: float = 60.0
     
     @classmethod
-    def from_env(cls) -> EmbeddingAPIConfig:
+    def from_env(cls, *, load_env: bool = True) -> "EmbeddingAPIConfig":
         """Load embedding API configuration from environment variables."""
-        load_dotenv()
+        if load_env:
+            load_dotenv()
         
-        api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("EMBEDDING_API_BASE_URL") or os.getenv("OPENAI_BASE_URL")
-        model = os.getenv("EMBEDDING_API_MODEL") or os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-        provider_str = os.getenv("EMBEDDING_API_PROVIDER", "openai")
+        api_key = _get_env_value("EMBEDDING_API_KEY", ("OPENAI_API_KEY",))
+        base_url = _get_env_value("EMBEDDING_API_BASE_URL", ("OPENAI_BASE_URL",))
+        if base_url is not None:
+            base_url = base_url.strip()
+        
+        model = _get_env_value("EMBEDDING_API_MODEL", ("EMBEDDING_MODEL",), "text-embedding-3-small")
+        provider_str = _get_env_value("EMBEDDING_API_PROVIDER", default="openai") or "openai"
         
         try:
             provider = ProviderType(provider_str)
@@ -111,12 +143,20 @@ class EmbeddingAPIConfig:
             logger.warning(f"Unknown provider '{provider_str}', defaulting to 'openai'")
             provider = ProviderType.OPENAI
         
-        # Set default dimensions based on model
-        dimension = int(os.getenv("EMBEDDING_DIMENSION", "1536"))
-        if dimension == 1536 and model.endswith("-large"):
-            dimension = 3072
-        elif dimension == 3072 and model.endswith("-small"):
-            dimension = 1536
+        dimension_value = os.getenv("EMBEDDING_DIMENSION")
+        dimension: Optional[int] = None
+        if dimension_value is not None and dimension_value != "":
+            try:
+                dimension = int(dimension_value)
+            except ValueError:
+                logger.warning(
+                    "Invalid EMBEDDING_DIMENSION '%s', defaulting based on model",
+                    dimension_value,
+                )
+                dimension = None
+        
+        if dimension is None:
+            dimension = 3072 if model.endswith("-large") else 1536
         
         return cls(
             api_key=api_key,
@@ -124,10 +164,10 @@ class EmbeddingAPIConfig:
             model=model,
             provider=provider,
             dimension=dimension,
-            timeout=int(os.getenv("EMBEDDING_API_TIMEOUT", "30")),
-            max_retries=int(os.getenv("EMBEDDING_API_MAX_RETRIES", "3")),
-            retry_delay=float(os.getenv("EMBEDDING_API_RETRY_DELAY", "1.0")),
-            max_retry_delay=float(os.getenv("EMBEDDING_API_MAX_RETRY_DELAY", "60.0")),
+            timeout=int(_get_env_value("EMBEDDING_API_TIMEOUT", default="30") or 30),
+            max_retries=int(_get_env_value("EMBEDDING_API_MAX_RETRIES", default="3") or 3),
+            retry_delay=float(_get_env_value("EMBEDDING_API_RETRY_DELAY", default="1.0") or 1.0),
+            max_retry_delay=float(_get_env_value("EMBEDDING_API_MAX_RETRY_DELAY", default="60.0") or 60.0),
         )
 
 
@@ -139,32 +179,33 @@ class OpenAIConfig:
     embedding_api: EmbeddingAPIConfig = field(default_factory=EmbeddingAPIConfig.from_env)
     
     @classmethod
-    def from_env(cls) -> OpenAIConfig:
+    def from_env(cls) -> "OpenAIConfig":
         """Load configuration from environment variables."""
+        load_dotenv()
         return cls(
-            chat_api=ChatAPIConfig.from_env(),
-            embedding_api=EmbeddingAPIConfig.from_env(),
+            chat_api=ChatAPIConfig.from_env(load_env=False),
+            embedding_api=EmbeddingAPIConfig.from_env(load_env=False),
         )
     
     @classmethod
-    def from_env_with_fallback(cls) -> OpenAIConfig:
+    def from_env_with_fallback(cls) -> "OpenAIConfig":
         """Load configuration with fallback for embedding API to chat API."""
-        chat_config = ChatAPIConfig.from_env()
+        load_dotenv()
+        chat_config = ChatAPIConfig.from_env(load_env=False)
         
-        # Try to load embedding config
         try:
-            embedding_config = EmbeddingAPIConfig.from_env()
-            # If embedding API key is None but chat API key exists, fallback
+            embedding_config = EmbeddingAPIConfig.from_env(load_env=False)
             if embedding_config.api_key is None and chat_config.api_key:
                 logger.info("Embedding API key not set, falling back to chat API key")
                 embedding_config.api_key = chat_config.api_key
-            # If embedding base URL is None but chat base URL exists, fallback
             if embedding_config.base_url is None and chat_config.base_url:
                 logger.info("Embedding API base URL not set, falling back to chat API base URL")
                 embedding_config.base_url = chat_config.base_url
-        except Exception as e:
-            logger.warning(f"Failed to load embedding API config, falling back to chat API: {e}")
-            # Fallback to chat API settings
+        except Exception as exc:
+            logger.warning(
+                "Failed to load embedding API config, falling back to chat API: {error}",
+                error=str(exc),
+            )
             embedding_config = EmbeddingAPIConfig(
                 api_key=chat_config.api_key,
                 base_url=chat_config.base_url,
@@ -174,6 +215,19 @@ class OpenAIConfig:
                 retry_delay=chat_config.retry_delay,
                 max_retry_delay=chat_config.max_retry_delay,
             )
+            model_override = _get_env_value("EMBEDDING_MODEL")
+            if model_override is not None:
+                embedding_config.model = model_override
+            dimension_override = _get_env_value("EMBEDDING_DIMENSION")
+            if dimension_override:
+                try:
+                    embedding_config.dimension = int(dimension_override)
+                except ValueError:
+                    logger.warning(
+                        "Invalid EMBEDDING_DIMENSION '%s', keeping existing value %s",
+                        dimension_override,
+                        embedding_config.dimension,
+                    )
         
         return cls(
             chat_api=chat_config,

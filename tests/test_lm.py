@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from dotenv import load_dotenv
 from utils.openai_client import get_openai_client, reset_openai_client
@@ -8,6 +10,9 @@ def test_language_model():
     """
     # Force override of environment variables with .env file
     load_dotenv(override=True)
+    
+    if not (os.getenv("CHAT_API_KEY") or os.getenv("OPENAI_API_KEY")):
+        pytest.skip("API key not configured for language model test")
     
     # Reset the client to ensure the new environment variables are loaded
     reset_openai_client()

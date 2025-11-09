@@ -1,5 +1,7 @@
 # multi-agent-brain
 
+[![Python CI](https://github.com/ldc861117/multi-agent-brain/actions/workflows/python-ci.yml/badge.svg)](https://github.com/ldc861117/multi-agent-brain/actions/workflows/python-ci.yml)
+
 A distributed multi-agent collaboration system built on **OpenAgents** and **Milvus** vector database, enabling intelligent agents to share knowledge and work together seamlessly.
 
 ## 🎯 Core Value Proposition
@@ -21,6 +23,13 @@ multi-agent-brain provides a robust framework for building sophisticated multi-a
 - 🔄 **Task 3**: Milvus shared memory system - **IN PROGRESS**
 - ⏳ **Task 4**: Create expert agents - **PENDING**
 - ⏳ **Task 5**: Build demo runner - **PENDING**
+
+## ✅ Continuous Integration
+
+- **Workflow**: [Python CI](https://github.com/ldc861117/multi-agent-brain/actions/workflows/python-ci.yml) runs on every push and pull request across Python 3.10 and 3.11.
+- **Tests**: Installs pinned dependencies from `requirements.txt` and runs `pytest` with coverage enabled.
+- **Coverage policy**: Uses `--cov-fail-under=60` to keep builds stable while allowing early iteration.
+- **Artifacts**: Publishes `coverage.xml` and the generated `htmlcov/` report for each matrix entry.
 
 ---
 

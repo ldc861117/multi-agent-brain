@@ -33,12 +33,12 @@ verify-tests:
 	scripts/verify_tests.py
 
 test: install
-	$(PYTEST) -q
+	PYTHONPATH=. $(PYTEST) -q
 
 test-fast: install
-	$(PYTEST) -q -m "not slow and not integration"
+	PYTHONPATH=. $(PYTEST) -q -m "not slow and not integration"
 
 cov: install
-	$(PYTEST) --cov-config=.coveragerc --cov=agents --cov=utils --cov-report=term-missing --cov-report=xml --cov-report=html
+	PYTHONPATH=. $(PYTEST) --cov-config=.coveragerc --cov=agents --cov=utils --cov-report=term-missing --cov-report=xml --cov-report=html
 
 cov-html: cov

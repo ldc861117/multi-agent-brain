@@ -1,116 +1,144 @@
-# Codemap.md - Complete Code Logic and Structure Mapping
+# Codemap.md - multi-agent-brain 代码地图 / Code Map
 
-创建一份详细的代码地图，完整映射整个 multi-agent-brain 项目的代码逻辑、结构和数据流。
+> 聚焦于目录结构、核心模块以及配置数据流，帮助贡献者与 AI Agents 快速定位代码入口。
+> *English summary: High-resolution map of the multi-agent-brain repository covering layout, key modules, config flow, and test surfaces.*
 
-## Codemap 目的
-为开发者、review 人员和新贡献者提供清晰的代码导航，快速理解系统架构和模块间关系。
+---
 
-## 1. 系统架构总览
+## 0. 导航速览 / Navigation
 
-### 分层架构图
-- **Agent Layer**: CoordinatorAgent + Expert Agents
-- **Communication Layer**: OpenAgents HTTP Network (Port 8700)
-- **Memory Layer**: Milvus Shared Memory + Embedding Cache
-- **Client Layer**: OpenAI Client Wrapper + Custom Base URL
-- **External Services**: OpenAI/DeepSeek/Milvus Lite
+| 主题 | 内容 | 跳转 |
+|------|------|------|
+| 目录鸟瞰 | 顶层与关键子目录 | [§1](#1-目录鸟瞰-directory-overview) |
+| 核心模块 | config_manager / coordination / shared_memory / tests | [§2](#2-核心模块关键模块-key-modules) |
+| 配置数据流 | config.yaml → 环境 → OpenAIClient → Agents | [§3](#3-配置数据流-configuration-data-flow) |
+| 消息处理路径 | 用户问题 → 协调 → 专家 → Memory | [§4](#4-消息处理路径-runtime-message-flow) |
+| 测试矩阵 | 单测与集成测试覆盖范围 | [§5](#5-测试矩阵-testing-matrix) |
+| 文档 & 脚本 | 重要文档、辅助脚本 | [§6](#6-文档--脚本-docs--scripts) |
 
-### 数据流示例
-- **用户提问 → Coordinator 分析 → 并行执行专家 → 结果整合 → 返回答案**
-- **知识累积**: Agent 执行 → 存储到 SharedMemory → 下次查询检索
+---
 
-## 2. 核心模块详解
+## 1. 目录鸟瞰 (Directory Overview)
 
-### 2.1 utils/openai_client.py
-- **OpenAIConfig (Dataclass)**: 配置管理
-- **OpenAIClientWrapper**: 核心客户端
-  - `get_chat_completion()`: 聊天补全
-  - `get_embedding()`: embedding 生成
-  - `_retry_with_backoff()`: 指数退避重试
-- **关键特性**: 支持自定义 base_url, 重试机制, 错误处理
-- **测试**: 27 个单元测试 (100% 通过)
+```text
+multi-agent-brain/
+├── agents/
+│   ├── __init__.py
+│   ├── base.py                    # BaseAgent & AgentResponse
+│   ├── coordination/              # CoordinationAgent orchestrator
+│   ├── general/                   # Default user-facing agent
+│   ├── python_expert/             # Python scaffold
+│   ├── milvus_expert/             # Milvus scaffold
+│   ├── devops_expert/             # DevOps scaffold
+│   └── shared_memory.py           # Milvus-backed knowledge store
+├── utils/
+│   ├── __init__.py                # Public utilities exports
+│   ├── config_manager.py          # YAML + env + overrides loader
+│   ├── config_validator.py        # Schema validation & CLI
+│   └── openai_client.py           # LLM client abstraction
+├── tests/
+│   ├── conftest.py                # Fixture: clean env, monkeypatch
+│   ├── test_env_config.py         # Config precedence & overrides
+│   ├── test_openai_client.py      # OpenAI client behaviours
+│   ├── test_shared_memory.py      # Milvus operations (mocked)
+│   ├── test_config_validator.py   # YAML validation pipeline
+│   └── test_lm.py                 # Language model helpers
+├── config.yaml                    # Production-ready network config
+├── config.default.yaml            # Template for validator repair
+├── requirements.txt               # Dependency lock
+├── Makefile                       # install/test/coverage helpers
+├── README.md                      # 人类友好 & 英文摘要
+├── AGENTS.md                      # 机器可读 Agent 手册
+└── Codemap.md                     # 当前文档
+```
 
-### 2.2 agents/shared_memory.py
-- **SharedMemory (同步接口)**:
-  - `__init__()`: 初始化连接和集合
-  - `store_knowledge()`: 存储单个知识
-  - `search_knowledge()`: 语义搜索
-  - `batch_store_knowledge()`: 批量存储
-  - `batch_search_knowledge()`: 批量搜索
-  - `health_check()`: 健康检查
+---
 
-- **3 个 Milvus Collections**:
-  - `expert_knowledge`: 专家知识库 (tenant_id 多租户隔离)
-  - `collaboration_history`: 协作历史
-  - `problem_solutions`: 问题解决方案
+## 2. 核心模块关键模块 (Key Modules)
 
-- **EmbeddingCache**: LRU 缓存避免重复 API 调用
-- **AsyncSharedMemory (异步接口, Medium Priority)**
+| 模块 | 主要类型 / 方法 | 作用（中文） | Key Notes (EN) | 相关测试 |
+|------|------------------|--------------|----------------|----------|
+| `utils/config_manager.py` | `ConfigManager`, `get_agent_config`, `get_agent_answer_verbose` | 统一加载 `config.yaml` + 环境变量 + agent overrides，提供每个 Agent 的模型/维度配置。 | Caches per-agent OpenAIConfig instances and exposes verbose flag. | `tests/test_env_config.py` `TestPerAgentOverrides` |
+| `utils/openai_client.py` | `OpenAIClientWrapper`, `OpenAIConfig`, `ChatAPIConfig`, `EmbeddingAPIConfig` | 封装 Chat & Embedding API，支持自定义 provider、指数退避、批量 Embedding。 | Shared by all agents; embedding falls back to chat when unset. | `tests/test_openai_client.py` |
+| `agents/coordination/agent.py` | `CoordinationAgent`, `analyze_question`, `dispatch_to_experts`, `synthesize_answer`, `store_collaboration` | 核心编排器：解析任务、检索 SharedMemory、并发调度专家、生成最终回复并记录协作。 | Async orchestration with heuristics + config-driven verbose mode. | `examples/coordination_agent_example.py` (usage) |
+| `agents/shared_memory.py` | `SharedMemory`, `EmbeddingCache`, `Metrics` | Milvus 向量存储封装：多租户集合、批量读写、缓存指标。 | Provides sync API, optional async version, integrates LLM embedding. | `tests/test_shared_memory.py` |
+| `agents/base.py` | `BaseAgent`, `AgentResponse` | 定义所有 Agent 必须遵循的接口与响应封装。 | Supplies metadata, async `handle_message` contract. | 被所有 Agent 测试间接覆盖 |
+| `tests/test_env_config.py` | Pytest classes `TestEnvironmentVariableLoading` 等 | 验证 `.env`、`CHAT_API_*`、`EMBEDDING_API_*`、`agent_overrides` 行为。 | Monkeys environment to avoid leakage, checks precedence. | - |
+| `tests/test_config_validator.py` | `ConfigValidator` 集成测试 | 确保 `config.yaml` 与模板一致或可自动修复。 | CLI style checks & diff logging. | - |
 
-### 2.3 agents/coordinator.py (待实现)
-- **职责**: 分析问题, 协调专家, 整合答案
-- **关键方法**: `analyze_question()`, `coordinate_experts()`, `on_message()`
+---
 
-### 2.4 agents/*_expert.py (待实现)
-- **PythonExpertAgent, MilvusExpertAgent, DevOpsExpertAgent**
-- **共同模式**: 查询 SharedMemory, 调用 OpenAI client, 存储知识
+## 3. 配置数据流 (Configuration Data Flow)
 
-## 3. 关键业务流程
+> *English summary: How configuration travels from YAML and environment variables into running agents.*
 
-### 问题-回答流程
-1. 用户提问 → Coordinator 接收
-2. Coordinator 分析并查询 SharedMemory 历史
-3. 向相关专家 channel 分发任务 (并行)
-4. 各专家查询 SharedMemory, 调用 LLM, 存储知识
-5. Coordinator 整合回答, 存储协作历史
-6. 返回最终答案
+```text
+config.yaml (api_config & agent_overrides)
+        │
+        ▼
+utils.config_manager.ConfigManager
+  ├─ get_global_config()   ← 读取环境变量 `.env` (CHAT_API_*, EMBEDDING_API_*)
+  ├─ get_agent_config(name)
+  │    └─ 合并 agent_overrides.<name>
+  └─ get_agent_answer_verbose(name)
+        │
+        ▼
+utils.openai_client.OpenAIClientWrapper(config)
+        │
+        ▼
+agents.<*>.handle_message()  // 使用统一客户端和 SharedMemory
+```
 
-### 知识累积流程
-1. Agent 执行生成知识
-2. 存储到 SharedMemory (3 个集合)
-3. 下次查询时检索相似知识
-4. 系统效能递增
+**优先级（逻辑顺序）**
+1. `config.yaml` 提供默认值 + agent 覆盖。
+2. `.env` / 系统环境覆盖相同字段（若存在 `CHAT_API_*`, `EMBEDDING_API_*`）。
+3. 兼容性变量 `OPENAI_*`, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION` 兜底。
 
-## 4. 技术栈依赖
-- `openagents>=0.6.11`: Agent 框架
-- `pymilvus>=2.5.1`: 向量数据库
-- `openai>=1.0.0`: LLM 调用
-- `python-dotenv`: 环境变量加载
-- `loguru`: 日志记录
-- `pydantic`: 数据验证
+> 若发现 YAML 修改未生效，请删除对应环境变量并调用 `utils.reload_config()`。
 
-## 5. 环境变量配置
-- `OPENAI_API_KEY`: API 密钥
-- `OPENAI_BASE_URL`: 自定义端点
-  - OpenAI: https://api.openai.com/v1
-  - DeepSeek: https://api.deepseek.com/v1
-  - Moonshot: https://api.moonshot.cn/v1
-  - Local: http://localhost:8000/v1
-- `MILVUS_URI`: 数据库地址
-- `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`
+---
 
-## 6. 测试策略
-- **单元测试**: OpenAI client (27 tests), SharedMemory (待实现)
-- **集成测试**: Agent 间通信, End-to-end 流程
-- **性能测试**: 缓存命中率, 搜索延迟, 吞吐量
+## 4. 消息处理路径 (Runtime Message Flow)
 
-## 7. 代码规范
-- **命名**: PascalCase (类), snake_case (方法/变量)
-- **文档**: 所有公开方法需要 docstring
-- **错误**: 自定义异常 + 详细日志
-- **日志**: 使用 loguru
+1. **入口**：
+   - 用户消息通过 `general` or `coordination` channel 进入。
+   - `GeneralAgent` 直接回覆或转交 `CoordinationAgent`。
+2. **协调**：`CoordinationAgent.handle_message()`
+   - `analyze_question()` 依据关键词、上下文 & `agent_overrides` 的 verbose 设置确定目标专家。
+   - `retrieve_similar_knowledge()` 调用 `SharedMemory.search_knowledge()` 获取上下文。
+   - `dispatch_to_experts()` 并发调用专家的 `handle_message()`。
+3. **专家执行**：各专家使用 `OpenAIClientWrapper` 和 `SharedMemory`（模板阶段返回占位回应）。
+4. **汇总与存储**：
+   - `synthesize_answer()` 合成最终答复。
+   - `store_collaboration()` 写入 `collaboration_history`，包含参与者、内容摘要、时间戳。
+5. **响应**：返回 `AgentResponse(content, metadata)` 给调用方。
 
-## 8. 开发路线图
-- **Phase 1 ✅**: 基础设施 (Bootstrap, OpenAI client)
-- **Phase 2 🔄**: 核心功能 (Milvus, 4 个 Agent)
-- **Phase 3 📋**: 优化扩展 (异步, 性能, 部署)
+---
 
-## 9. 关键指标
-- **Embedding 缓存命中率**: >70%
-- **Search 延迟 (P99)**: <20ms
-- **Agent 响应**: <5s
-- **系统吞吐**: >100 QPS
+## 5. 测试矩阵 (Testing Matrix)
 
-## 10. 快速导航
-- **如何添加新 Agent?** → 参考 agents/python_expert.py
-- **如何自定义 LLM?** → 修改 .env OPENAI_BASE_URL
-- **如何提高性能?** → 利用缓存和批量操作
+| 测试文件 | 覆盖范围 | 关键夹具 / 技术点 |
+|----------|----------|------------------|
+| `tests/test_env_config.py` | `.env` & `config.yaml` 解析、provider 支持、agent overrides、fallback 行为 | `clean_env` (monkeypatch), `mock_load_dotenv`, 临时 YAML 文件 |
+| `tests/test_openai_client.py` | Chat/Embedding 客户端初始化、重试机制、provider 兼容性、错误处理 | `openai_client_instance`, `monkeypatch` for OpenAI SDK |
+| `tests/test_shared_memory.py` | SharedMemory 集合初始化、批量操作、缓存命中率、Milvus mock | `FakeMilvus`, `memory_factory` |
+| `tests/test_config_validator.py` | `ConfigValidator` CLI 行为、缺失键修复、差异输出 | `tmp_path_factory`, `monkeypatch` CLI args |
+| `tests/test_lm.py` | 语言模型辅助函数 & 基础工具 | 轻量、无外部依赖 |
+
+> 执行方式：`make test`（完整），`make test-fast`（排除 slow/integration），`make cov`（带覆盖率报告）。
+
+---
+
+## 6. 文档 & 脚本 (Docs & Scripts)
+
+| 资源 | 描述 | 用法 |
+|------|------|------|
+| `README.md` | 项目总览、Quickstart、配置优先级、Troubleshooting | 面向人类 + 英文补充 |
+| `AGENTS.md` | AI Agent 作业手册（中文主、英文辅） | 自动化 Agent 读取、任务映射 |
+| `Codemap.md` | **当前文档**，结构 & 数据流 | 代码定位与审查参考 |
+| `examples/openai_client_examples.py` | OpenAIClient 基础示例 | `python examples/openai_client_examples.py` |
+| `examples/shared_memory_usage.py` | SharedMemory CRUD + 检索示例 | `python examples/shared_memory_usage.py` |
+| `Makefile` | 快捷命令：`make install`、`make run-network`、`make milvus-lite` | 推荐统一入口 |
+| `scripts/verify_tests.py` | 快速校验测试文件存在性/命名 | `python scripts/verify_tests.py --run` |
+
+> 如需更多上下文，可对照 `DOCUMENTATION_INDEX.md` 与 `OPENAI_CLIENT_TEST_REWRITE_SUMMARY.md` 获取历史变更记录。

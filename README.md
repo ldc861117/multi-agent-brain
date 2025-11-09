@@ -1,669 +1,200 @@
 # multi-agent-brain
 
-[![Python CI](https://github.com/ldc861117/multi-agent-brain/actions/workflows/python-ci.yml/badge.svg)](https://github.com/ldc861117/multi-agent-brain/actions/workflows/python-ci.yml)
+[![CI · Python & Docs](https://img.shields.io/github/actions/workflow/status/ldc861117/multi-agent-brain/python-ci.yml?branch=main&label=CI%20%C2%B7%20Python%20%26%20Docs&logo=github)](https://github.com/ldc861117/multi-agent-brain/actions/workflows/python-ci.yml)
 
-A distributed multi-agent collaboration system built on **OpenAgents** and **Milvus** vector database, enabling intelligent agents to share knowledge and work together seamlessly.
-
-## 🎯 Core Value Proposition
-
-multi-agent-brain provides a robust framework for building sophisticated multi-agent systems with:
-
-- **🤝 Multi-Agent Collaboration**: Distributed, non-centralized architecture where specialized agents work together
-- **🧠 Shared Memory System**: Milvus-powered vector database for semantic knowledge sharing across agents
-- **🔧 Flexible LLM Support**: Compatible with OpenAI, DeepSeek, Moonshot, Azure OpenAI, and other OpenAI-compatible APIs
-- **🏗️ Modular Design**: Easy to extend with new agents and capabilities
-- **⚡ Performance Optimized**: Built-in embedding caching and batch operations for efficiency
+> 多智能体协作平台，基于 **OpenAgents** 网络与 **Milvus** 向量数据库，支持自定义 LLM 提供商与多租户共享记忆。
+> *English summary: A multi-agent collaboration system powered by OpenAgents, Milvus vector search, and a provider-agnostic OpenAI-compatible client.*
 
 ---
 
-## 📊 Project Status
+## 🌟 项目简介 (Project Overview)
 
-- ✅ **Task 1**: Bootstrap project layout - **COMPLETED**
-- ✅ **Task 2**: OpenAI client implementation + Code Review - **COMPLETED**
-- 🔄 **Task 3**: Milvus shared memory system - **IN PROGRESS**
-- ⏳ **Task 4**: Create expert agents - **PENDING**
-- ⏳ **Task 5**: Build demo runner - **PENDING**
-
-## ✅ Continuous Integration
-
-- **Workflow**: [Python CI](https://github.com/ldc861117/multi-agent-brain/actions/workflows/python-ci.yml) runs on every push and pull request across Python 3.10 and 3.11.
-- **Tests**: Installs pinned dependencies from `requirements.txt` and runs `pytest` with coverage enabled.
-- **Coverage policy**: Uses `--cov-fail-under=60` to keep builds stable while allowing early iteration.
-- **Artifacts**: Publishes `coverage.xml` and the generated `htmlcov/` report for each matrix entry.
+- 🤝 **多智能体协作**：`CoordinationAgent` 调度 Python / Milvus / DevOps 专家，整合答案并沉淀知识。
+- 🧠 **Milvus 共享记忆**：统一的向量检索层，支持批量写入、缓存命中追踪和多租户隔离。
+- 🔧 **灵活的 LLM 提供商**：通过 `CHAT_API_*` / `EMBEDDING_API_*` 与 `config.yaml` 的 `agent_overrides`，可以自由切换 OpenAI、DeepSeek、Moonshot、Ollama 等后端。
+- 🧩 **可扩展架构**：遵循 `BaseAgent` 接口即可快速接入新的专家 Agent；所有配置由 `ConfigManager` 管理。
 
 ---
 
-## 🏗️ Architecture Overview
+## 🚀 快速开始 (Quick Start)
 
-```
-┌─────────────────────────────────────────────────────┐
-│         OpenAgents HTTP Network (Port 8700)          │
-│  ┌──────────────┬──────────────┬──────────────────┐ │
-│  │ Coordinator  │ Python Expert│ Milvus Expert    │ │
-│  │   Agent      │   Agent      │   Agent          │ │
-│  │              │              │ + DevOps Expert  │ │
-│  └──────────────┴──────────────┴──────────────────┘ │
-└─────────────────────────────────────────────────────┘
-         ↓ (queries/stores knowledge)
-┌─────────────────────────────────────────────────────┐
-│     Milvus Shared Memory + Embedding Cache          │
-│  ┌────────────────────────────────────────────┐    │
-│  │ • expert_knowledge (multi-tenant)          │    │
-│  │ • collaboration_history                    │    │
-│  │ • problem_solutions                        │    │
-│  │ • LRU Cache for Embeddings (1000 entries)  │    │
-│  └────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────┘
-         ↓ (embedding generation)
-┌─────────────────────────────────────────────────────┐
-│   OpenAI Client Wrapper (Custom Base URL Support)   │
-│  • Chat Completions with Retry Logic               │
-│  • Embedding Generation                             │
-│  • Error Handling & Logging                        │
-└─────────────────────────────────────────────────────┘
-```
+> *English summary: Create a virtualenv, install dependencies, configure .env, prepare Milvus, launch the OpenAgents network, and run tests via Makefile.*
 
----
-
-## 🚀 Quick Start
-
-### 1. Environment Setup
-
-```bash
-# Create and activate conda environment
-conda create -n multi-agent-brain python=3.11
-conda activate multi-agent-brain
-```
-
-### 2. Install Dependencies
-
-```bash
-# Upgrade pip
-pip install --upgrade pip
-
-# Install required packages
-pip install -r requirements.txt
-```
-
-### 3. Configure Environment Variables
-
-```bash
-# Copy the example environment file
-cp .env.example .env
-
-# Edit .env with your API keys and configuration
-nano .env  # or use your preferred editor
-```
-
-### 4. Start Milvus (Optional - for persistent storage)
-
-**Option A - Using Milvus Lite (embedded, no Docker):**
-```bash
-# Milvus Lite will automatically start when you use file-based URI
-# Just set MILVUS_URI=./milvus_data.db in your .env file
-```
-
-**Option B - Using Docker (for production):**
-```bash
-docker run --rm -it \
-  -p 19530:19530 \
-  -p 9091:9091 \
-  -v "$(pwd)/.milvus:/var/lib/milvus" \
-  milvusdb/milvus:v2.4.4-liteserve
-```
-
-### 5. Start the OpenAgents Network
-
-```bash
-# Start the HTTP network with agents
-openagents network http --config config.yaml
-```
-
-### 6. Launch OpenAgents Studio (Optional)
-
-```bash
-# In a new terminal window
-openagents studio --config config.yaml
-```
-
-Then open your browser to `http://localhost:8050` to interact with the agents.
-
-### 7. Run the Demo
-
-```bash
-# In another terminal (when implemented)
-python multi_agent_demo.py
-```
-
----
-
-## ⚙️ Configuration
-
-The system is configured through environment variables in the `.env` file. See `.env.example` for all available options.
-
-### Essential Configuration
-
-| Variable | Description | Example Values |
-|----------|-------------|----------------|
-| `OPENAI_API_KEY` | API key for your LLM provider | `sk-...` |
-| `OPENAI_BASE_URL` | API endpoint URL | See table below |
-| `OPENAI_MODEL` | Model name to use | `gpt-4o`, `deepseek-chat` |
-| `MILVUS_URI` | Milvus connection string | `./milvus_data.db` or `http://localhost:19530` |
-| `EMBEDDING_MODEL` | Embedding model name | `text-embedding-3-small` |
-| `EMBEDDING_DIMENSION` | Embedding vector dimension | `1536`, `3072` |
-
-### Supported LLM Providers
-
-| Provider | OPENAI_BASE_URL | Example Model |
-|----------|-----------------|---------------|
-| **OpenAI** | `https://api.openai.com/v1` | `gpt-4o`, `gpt-4o-mini` |
-| **DeepSeek** | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| **Moonshot** | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
-| **Azure OpenAI** | `https://your-resource.openai.azure.com/` | `gpt-4` |
-| **Local/Custom** | `http://localhost:8000/v1` | Your custom model |
-
-### Advanced Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_TIMEOUT` | Request timeout in seconds | `30` |
-| `OPENAI_MAX_RETRIES` | Maximum retry attempts | `3` |
-| `OPENAI_RETRY_DELAY` | Initial retry delay | `1.0` |
-| `OPENAI_MAX_RETRY_DELAY` | Maximum retry delay | `60.0` |
-
-### `config.yaml` Essentials
-
-The OpenAgents network now requires a `network` section with explicit transports and workspace mods alongside the LLM `api_config`. A minimal template looks like this:
-
-```yaml
-network:
-  name: "multi-agent-brain"
-  transports:
-    - type: "http"
-      config:
-        port: 8700
-  mods:
-    - name: "openagents.mods.workspace.default"
-      enabled: true
-
-api_config:
-  chat_api:
-    provider: "openai"
-    model: "gpt-3.5-turbo"
-  embedding_api:
-    provider: "openai"
-    model: "text-embedding-3-small"
-    dimension: 1536
-```
-
-Additional keys (gRPC transport, workspace messaging, per-agent overrides, `prompts`) can be customised as needed. Use the bundled validator to confirm your configuration before starting the network:
-
-```bash
-python3 -m utils.config_validator --path config.yaml
-python3 -m utils.config_validator --path config.yaml --repair  # Restore from config.default.yaml
-AUTO_REPAIR_CONFIG=1 ./run_demo.sh           # Non-interactive repair via run_demo
-```
-
-`run_demo.sh` automatically invokes the validator and (with confirmation or `AUTO_REPAIR_CONFIG=1`) can repair missing sections by copying the default template without overwriting your config silently.
-
----
-
-## 📁 Project Structure
-
-```
-multi-agent-brain/
-├── agents/                      # Agent implementations
-│   ├── __init__.py
-│   ├── base.py                  # Base agent class
-│   ├── shared_memory.py         # ✅ Milvus shared memory system
-│   ├── general/                 # General conversation agent
-│   ├── coordination/            # ⏳ Coordinator agent (pending)
-│   ├── python_expert/           # ⏳ Python specialist (pending)
-│   ├── milvus_expert/           # ⏳ Milvus specialist (pending)
-│   └── devops_expert/           # ⏳ DevOps specialist (pending)
-├── utils/                       # Utility modules
-│   ├── __init__.py
-│   ├── openai_client.py         # ✅ OpenAI client wrapper
-│   └── test_openai_client.py    # ✅ Client unit tests (27 tests)
-├── examples/                    # Usage examples
-│   ├── openai_client_examples.py
-│   └── shared_memory_usage.py
-├── config.yaml                  # ✅ OpenAgents network configuration
-├── requirements.txt             # ✅ Project dependencies
-├── .env.example                 # ✅ Environment template
-├── .gitignore                   # Git ignore rules
-├── Makefile                     # Helper commands
-├── README.md                    # This file
-├── Codemap.md                   # Code architecture mapping
-├── OPENAI_CLIENT_REVIEW.md      # Client code review
-├── SHARED_MEMORY_IMPLEMENTATION.md  # Memory system docs
-├── test_shared_memory.py        # 🔄 Memory unit tests (in progress)
-└── multi_agent_demo.py          # ⏳ Main demo entry (pending)
-```
-
----
-
-## 💡 Core Features
-
-### Feature 1: OpenAI Client Wrapper
-
-A production-ready OpenAI client with support for custom endpoints, automatic retries, and comprehensive error handling.
-
-```python
-from utils import get_openai_client
-
-# Automatically loads configuration from .env
-client = get_openai_client()
-
-# Chat completion with retry logic
-response = client.get_chat_completion(
-    messages=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "How do I use Milvus with Python?"}
-    ],
-    temperature=0.7,
-    max_tokens=500
-)
-print(response.choices[0].message.content)
-
-# Generate embeddings (automatically cached)
-embeddings = client.get_embedding("What is vector database?")
-print(f"Embedding dimension: {len(embeddings)}")
-
-# Batch embedding generation
-texts = ["Question 1", "Question 2", "Question 3"]
-all_embeddings = client.get_embeddings_batch(texts)
-```
-
-**Key Features:**
-- ✅ Custom base URL support for any OpenAI-compatible API
-- ✅ Exponential backoff retry with configurable delays
-- ✅ Comprehensive error handling and logging
-- ✅ Type-safe interfaces using Pydantic models
-- ✅ Environment-based configuration with dotenv
-
-**Test Coverage:** 27 unit tests with 100% pass rate
-
----
-
-### Feature 2: Milvus Shared Memory System
-
-A powerful vector-based knowledge sharing system with multi-tenant support and automatic caching.
-
-```python
-from agents.shared_memory import SharedMemory
-
-# Initialize shared memory
-memory = SharedMemory()
-
-# Store knowledge with multi-tenant isolation
-doc_id = memory.store_knowledge(
-    collection="expert_knowledge",
-    tenant_id="project_alpha",
-    content={
-        "expert_domain": "milvus",
-        "question": "How to create a collection?",
-        "answer": "Use Collection.create() with a schema definition...",
-        "tags": ["milvus", "database", "collection"]
-    }
-)
-
-# Semantic search with similarity threshold
-results = memory.search_knowledge(
-    collection="expert_knowledge",
-    tenant_id="project_alpha",
-    query="How do I create a Milvus collection?",
-    top_k=5,
-    threshold=0.7
-)
-
-for result in results:
-    print(f"Score: {result['score']:.3f}")
-    print(f"Content: {result['content']}")
-    print("---")
-
-# Batch operations for efficiency
-contents = [
-    {"domain": "python", "content": "..."},
-    {"domain": "devops", "content": "..."},
-    {"domain": "milvus", "content": "..."}
-]
-doc_ids = memory.batch_store_knowledge(
-    collection="problem_solutions",
-    tenant_id="project_alpha",
-    contents=contents
-)
-
-# Health check and metrics
-is_healthy = memory.health_check()
-metrics = memory.get_metrics()
-print(f"Cache hit ratio: {metrics.cache_hit_ratio:.2%}")
-print(f"Avg search latency: {metrics.get_average_latency():.3f}ms")
-```
-
-**Key Features:**
-- ✅ Three specialized collections: `expert_knowledge`, `collaboration_history`, `problem_solutions`
-- ✅ Multi-tenant support with partition keys
-- ✅ LRU embedding cache (1000 entries) to reduce API calls
-- ✅ Automatic retry logic for transient failures
-- ✅ Performance metrics tracking
-- ✅ Both synchronous and asynchronous interfaces (async coming soon)
-
-**Test Coverage:** Comprehensive unit tests with >80% coverage (in progress)
-
----
-
-### Feature 3: Agent Collaboration (Coming Soon)
-
-Agents work together through event-driven coordination:
-
-```python
-# Future implementation example:
-# 
-# 1. User asks a complex question
-# 2. Coordinator Agent analyzes and breaks down the problem
-# 3. Multiple Expert Agents work in parallel:
-#    - Python Expert handles code-related questions
-#    - Milvus Expert handles database queries
-#    - DevOps Expert handles infrastructure concerns
-# 4. All knowledge is stored in Shared Memory
-# 5. Coordinator synthesizes results and responds
-# 6. Future queries benefit from accumulated knowledge
-```
-
----
-
-## 🛠️ Development Guidelines
-
-### Code Style
-
-- **Naming Conventions:**
-  - Classes: `PascalCase` (e.g., `SharedMemory`, `OpenAIClientWrapper`)
-  - Functions/Methods: `snake_case` (e.g., `get_chat_completion`, `store_knowledge`)
-  - Constants: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`, `DEFAULT_TIMEOUT`)
-
-- **Documentation:**
-  - All public methods must have docstrings
-  - Use NumPy-style docstrings for consistency
-  - Include parameter types and return value descriptions
-
-- **Error Handling:**
-  - Use custom exceptions for domain-specific errors
-  - Always log errors with context using `loguru`
-  - Provide actionable error messages
-
-### Agent Development
-
-All agents should:
-1. Inherit from `WorkerAgent` base class
-2. Use the shared `OpenAIClientWrapper` for LLM calls
-3. Store important knowledge in `SharedMemory`
-4. Use `loguru` for structured logging
-5. Follow async patterns where appropriate
-
-### Example Agent Pattern
-
-```python
-from agents.base import WorkerAgent
-from agents.shared_memory import SharedMemory
-from utils import get_openai_client
-
-class MyExpertAgent(WorkerAgent):
-    def __init__(self):
-        super().__init__()
-        self.memory = SharedMemory()
-        self.client = get_openai_client()
-    
-    async def on_message(self, message):
-        # 1. Search existing knowledge
-        results = self.memory.search_knowledge(
-            collection="expert_knowledge",
-            tenant_id="default",
-            query=message.content
-        )
-        
-        # 2. Call LLM if needed
-        response = self.client.get_chat_completion(
-            messages=[{"role": "user", "content": message.content}]
-        )
-        
-        # 3. Store new knowledge
-        self.memory.store_knowledge(
-            collection="expert_knowledge",
-            tenant_id="default",
-            content={"query": message.content, "answer": response}
-        )
-        
-        return response
-```
-
----
-
-## 🧪 Testing
-
-### Test Suite Status
-
-| Component | Tests | Status | Coverage |
-|-----------|-------|--------|----------|
-| OpenAI Client | 27 | ✅ 100% Pass | High |
-| Shared Memory | In Progress | 🔄 | >80% |
-| Agent Integration | Pending | ⏳ | - |
-| End-to-End | Pending | ⏳ | - |
-
-### Running Tests
-
-```bash
-# Run OpenAI client tests
-pytest tests/test_openai_client.py -v
-
-# Run shared memory tests
-pytest tests/test_shared_memory.py -v
-
-# Run all tests
-make test
-
-# Run with coverage (coverage.xml + htmlcov/)
-make cov
-```
-
-### Common Pitfalls
-
-- Run tests from the project root so the consolidated `tests/` tree is picked up by `pytest`.
-- Avoid exporting production API keys when running the suite; the shared `tests/conftest.py` fixture cleans known variables but custom keys may still leak into the environment.
-- Always invoke coverage via `make cov` or `make cov-html` so both `coverage.xml` and `htmlcov/` are refreshed consistently.
-
-### Test Examples
-
-The `examples/` directory contains practical usage examples:
-
-```bash
-# Test OpenAI client functionality
-python examples/openai_client_examples.py
-
-# Test shared memory operations
-python examples/shared_memory_usage.py
-```
-
----
-
-## 🎯 Future Roadmap
-
-### Phase 3: Agent Implementation (In Progress)
-- [ ] Implement Coordinator Agent for task orchestration
-- [ ] Implement Python Expert Agent
-- [ ] Implement Milvus Expert Agent
-- [ ] Implement DevOps Expert Agent
-
-### Phase 4: Demo and Integration
-- [ ] Build comprehensive demo runner
-- [ ] Add end-to-end integration tests
-- [ ] Create interactive examples
-
-### Phase 5: Optimization and Scale
-- [ ] Add async support for all agents
-- [ ] Implement performance benchmarking (QPS, latency)
-- [ ] Optimize embedding cache strategies
-- [ ] Add distributed tracing
-
-### Phase 6: Production Ready
-- [ ] Docker containerization
-- [ ] Kubernetes deployment manifests
-- [ ] Monitoring and alerting setup
-- [ ] Production deployment guide
-
----
-
-## 📚 Reference Resources
-
-- **[OpenAgents Documentation](https://github.com/microsoft/openagents)** - Multi-agent framework
-- **[Milvus Vector Database](https://milvus.io/)** - High-performance vector database
-- **[OpenAI API Reference](https://platform.openai.com/docs/api-reference)** - LLM API documentation
-- **[Project Code Mapping](./Codemap.md)** - Detailed code architecture
-- **[OpenAI Client Review](./OPENAI_CLIENT_REVIEW.md)** - Implementation review
-- **[Shared Memory Docs](./SHARED_MEMORY_IMPLEMENTATION.md)** - Memory system details
-
----
-
-## 🔧 Troubleshooting
-
-### Common Issues and Solutions
-
-#### Issue: Milvus Connection Failed
-
-```bash
-# Error: Cannot connect to Milvus server
-```
-
-**Solutions:**
-1. Check if Milvus is running (if using Docker):
+1. **准备 Python 3.11+**
    ```bash
-   docker ps | grep milvus
+   python3 --version  # 确保返回 3.11 或更高
    ```
-2. Verify `MILVUS_URI` in `.env` matches your setup:
-   - Local file: `./milvus_data.db`
-   - Docker: `http://localhost:19530`
-3. For Milvus Lite, ensure pymilvus is properly installed:
+2. **创建虚拟环境并安装依赖**（或使用 `make install` 自动完成）
    ```bash
-   pip install pymilvus
-   ```
-
-#### Issue: OpenAI API Timeout
-
-```bash
-# Error: Request timeout after 30 seconds
-```
-
-**Solutions:**
-1. Increase timeout in `.env`:
-   ```bash
-   OPENAI_TIMEOUT=60
-   ```
-2. Check your network connection to the API endpoint
-3. Verify `OPENAI_BASE_URL` is correct for your provider
-4. For custom endpoints, ensure the server is running and accessible
-
-#### Issue: Embedding Dimension Mismatch
-
-```bash
-# Error: Embedding dimension does not match collection schema
-```
-
-**Solutions:**
-1. Verify your embedding model's dimension:
-   - `text-embedding-3-small`: 1536
-   - `text-embedding-3-large`: 3072
-2. Update `EMBEDDING_DIMENSION` in `.env` to match
-3. If changing models, you may need to recreate Milvus collections:
-   ```python
-   from agents.shared_memory import SharedMemory
-   memory = SharedMemory()
-   # Collections will be recreated with correct dimensions
-   ```
-
-#### Issue: Environment Variables Not Loading
-
-```bash
-# Error: OPENAI_API_KEY environment variable is required
-```
-
-**Solutions:**
-1. Ensure `.env` file exists in the project root:
-   ```bash
-   ls -la .env
-   ```
-2. Copy from example if missing:
-   ```bash
-   cp .env.example .env
-   ```
-3. Check that `python-dotenv` is installed:
-   ```bash
-   pip install python-dotenv
-   ```
-4. Verify no syntax errors in `.env` file (no spaces around `=`)
-
-#### Issue: Import Errors
-
-```bash
-# Error: ModuleNotFoundError: No module named 'agents' or 'utils'
-```
-
-**Solutions:**
-1. Ensure you're running from the project root directory
-2. Verify all dependencies are installed:
-   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install --upgrade pip
    pip install -r requirements.txt
    ```
-3. Check your Python environment is activated:
+3. **配置环境变量**
    ```bash
-   conda activate multi-agent-brain
+   cp .env.example .env
+   # 使用喜欢的编辑器填入 CHAT_API_KEY / EMBEDDING_API_KEY / MILVUS_URI 等
+   ```
+4. **准备 Milvus（任选其一）**
+   - Docker：`make milvus-lite`
+   - Milvus Cloud：在 `.env` 中设置 HTTPS URI
+   - 本地服务：确保 `MILVUS_URI` 指向 `http://host:19530`
+5. **启动 OpenAgents 网络（HTTP + gRPC）**
+   ```bash
+   make run-network   # 等价于 openagents network http --config config.yaml
+   ```
+6. **（可选）启动 Studio UI**
+   ```bash
+   make studio
+   ```
+7. **验证网络与健康状况**
+   ```bash
+   curl http://localhost:8700/health
    ```
 
-#### Issue: OpenAgents Network Won't Start
+---
 
-```bash
-# Error: Port 8700 already in use
+## ⚙️ 配置优先级 (Configuration Precedence)
+
+> *English summary: Config defaults originate from `config.yaml`, environment variables override them, and legacy `OPENAI_*` keys provide backward compatibility.*
+
+| 优先级（高 → 低） | 来源 | 说明 |
+|-------------------|------|------|
+| 1 | `config.yaml` → `api_config` & `agent_overrides` | 提供默认 provider、模型、维度、`answer_verbose` 等。|
+| 2 | `.env` / 系统环境 (`CHAT_API_*`, `EMBEDDING_API_*`) | 如设置同名变量，将覆盖 YAML 值；常用于临时切换模型或端点。|
+| 3 | 兼容性变量 (`OPENAI_*`, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION`) | 仍被 `OpenAIConfig.from_env_with_fallback()` 识别，为旧脚本提供兜底。|
+
+**行为提示**
+- `ConfigManager` 会优先读取环境变量；若想强制使用 YAML 中的覆盖值，请移除相关环境变量并调用 `from utils import reload_config; reload_config()`。
+- `agent_overrides.<agent>.answer_verbose` 控制是否生成长答案，默认 `false`。
+- 嵌入模型维度可在 overrides 中单独配置（示例：`coordination` 使用 768 维 `qwen3-embedding:0.6b`）。
+
+---
+
+## 🔧 运行与测试命令 (Run & Test Commands)
+
+| 命令 | 作用 | 说明 |
+|------|------|------|
+| `make install` | 创建 `.venv` 并安装依赖 | 推荐的首次操作 |
+| `make run-network` | 启动 OpenAgents HTTP 网络 | 使用 `config.yaml` 中 transports 设置 |
+| `make studio` | 启动 OpenAgents Studio UI | 便于可视化调试 |
+| `make milvus-lite` | 启动 Milvus Docker 容器 | 适合本地开发 |
+| `make test` | 运行完整 pytest (含覆盖率) | 自动设置 `PYTHONPATH=.` |
+| `make test-fast` | 过滤 slow / integration 标记 | 更快反馈 |
+| `make cov` | 生成覆盖率报告 (`coverage.xml`, `htmlcov/`) | 结合 CI artefact |
+| `make cov-html` | 仅刷新 HTML 覆盖率 | 依赖 `make cov` |
+| `make verify-tests` | 运行 `scripts/verify_tests.py` 校验测试布局 | 快速一致性检查 |
+
+> 所有命令默认使用 `.venv`，若已有虚拟环境可直接运行 `pytest` / `openagents` 等。
+
+---
+
+## 🧠 架构概览 (Architecture Overview)
+
+```text
+┌────────────────────────────────────────────────────┐
+│                OpenAgents Network (HTTP+gRPC)      │
+│  ┌───────────────┬───────────────┬──────────────┐ │
+│  │ Coordination  │ Python Expert │ Milvus Expert │ │
+│  │    Agent      │    Agent      │    Agent      │ │
+│  │               └───────────────┴──────────────┘ │
+│  │            DevOps Expert + General Agent       │
+└──┴─────────────────────────────────────────────────┘
+           │ 共享知识 (向量检索 + 缓存)
+           ▼
+┌────────────────────────────────────────────────────┐
+│     SharedMemory (Milvus + Embedding Cache)        │
+│  • expert_knowledge  • collaboration_history       │
+│  • problem_solutions • metrics & cache hit ratio   │
+└────────────────────────────────────────────────────┘
+           │ LLM 调用 (Chat + Embedding)
+           ▼
+┌────────────────────────────────────────────────────┐
+│       OpenAIClientWrapper (Provider-agnostic)      │
+│  • Separate chat/embedding configs                 │
+│  • Exponential backoff retry                       │
+│  • ProviderType: openai / ollama / custom          │
+└────────────────────────────────────────────────────┘
 ```
 
-**Solutions:**
-1. Change the port in `config.yaml`:
-   ```yaml
-   network:
-     settings:
-       port: 8701
-   ```
-2. Or stop the process using port 8700:
-   ```bash
-   lsof -ti:8700 | xargs kill -9
-   ```
+---
+
+## 🛠️ 核心组件 (Key Components)
+
+| 位置 | 说明 | 亮点 |
+|------|------|------|
+| `agents/coordination/agent.py` | 协调中心：解析问题、检索历史数据、调度专家、汇总结果并存档 | 支持并发、可配置 `SUPPORTED_EXPERTS`、记录详细日志 |
+| `agents/shared_memory.py` | Milvus backed knowledge store | 多租户集合、批量 CRUD、`EmbeddingCache` 与指标追踪 |
+| `utils/config_manager.py` | 合并 `config.yaml` + 环境变量 + overrides | 缓存每个 Agent 的 `OpenAIConfig`，提供 `get_agent_answer_verbose` |
+| `utils/openai_client.py` | Chat/Embedding 客户端封装 | provider 无关、指数退避、批量 embedding、fallback 策略 |
+| `tests/test_env_config.py` | 配置加载单测 | 通过 monkeypatch 确保环境隔离，覆盖所有优先级场景 |
 
 ---
 
-## 🤝 Contributing
+## 📦 LLM Provider 设置速查 (Provider Setup Cheatsheet)
 
-Contributions are welcome! Please follow these guidelines:
+```ini
+# OpenAI
+CHAT_API_KEY=sk-xxxx
+CHAT_API_BASE_URL=https://api.openai.com/v1
+CHAT_API_MODEL=gpt-4o-mini
 
-1. Follow the existing code style and conventions
-2. Add tests for new features
-3. Update documentation as needed
-4. Ensure all tests pass before submitting
+# DeepSeek
+CHAT_API_KEY=deepseek-xxx
+CHAT_API_BASE_URL=https://api.deepseek.com/v1
+CHAT_API_MODEL=deepseek-chat
+CHAT_API_PROVIDER=custom
+
+# Moonshot
+CHAT_API_KEY=moonshot-xxx
+CHAT_API_BASE_URL=https://api.moonshot.cn/v1
+CHAT_API_MODEL=moonshot-v1-8k
+
+# 本地 Ollama Embedding (示例)
+EMBEDDING_API_KEY=ollama
+EMBEDDING_API_BASE_URL=http://localhost:11434/v1
+EMBEDDING_API_MODEL=qwen3-embedding:0.6b
+EMBEDDING_API_PROVIDER=ollama
+EMBEDDING_DIMENSION=768
+```
+
+> 需要覆盖某个 Agent：在 `config.yaml` 添加 `api_config.agent_overrides.<agent>.chat_model` / `embedding_model`。
 
 ---
 
-## 📄 License
+## 🧰 故障排查 (Troubleshooting)
 
-This project is part of a multi-agent scaffolding framework. Please refer to the LICENSE file for details.
+| 症状 | 可能原因 | 解决方案 |
+|------|----------|----------|
+| `Milvus connection refused` | Milvus 未启动或 URI 错误 | 确认容器/服务运行；在 `.env` 中使用 `http://localhost:19530` 或云端 HTTPS URI；可用 `make milvus-lite` 启动本地实例。 |
+| `embedding dimension mismatch (expected 768, got 1536)` | 模型维度与配置不符 | 在 `config.yaml` 的 `agent_overrides` 或 `.env` 中同步更新 `EMBEDDING_DIMENSION`。 |
+| `OpenAIError: Rate limit` | Provider 限流 | 调整 `CHAT_API_MAX_RETRIES` / `CHAT_API_MAX_RETRY_DELAY`，或切换到备用 API Key。 |
+| `agent_overrides` 未生效 | 同名环境变量仍存在 | 清除 `.env` 中相关变量，运行<br>`python - <<'PY'`<br>`from utils import reload_config`<br>`reload_config()`<br>`PY` 重载配置。 |
+| Studio 无法连接 | Network transport 未启动或端口冲突 | 确认 `make run-network` 正常运行且 8700/8050 端口未被占用。 |
 
----
-
-## 🙋 Support
-
-For questions, issues, or suggestions:
-
-1. Check the [Troubleshooting](#troubleshooting) section
-2. Review existing documentation in the `/docs` folder
-3. Check the [Codemap.md](./Codemap.md) for architectural details
-4. Open an issue on the project repository
+> 日志默认输出到 stdout，格式由 `config.yaml` 中 `logging` 段定义（`loguru`）。
 
 ---
 
-**Built with ❤️ using OpenAgents and Milvus**
+## 📚 文档导航 (Documentation Hub)
+
+| 文档 | 作用 | 链接 |
+|------|------|------|
+| `AGENTS.md` | 机器可读 Agent 开发指南（中文主） | [查看](AGENTS.md) |
+| `Codemap.md` | 代码结构与配置数据流地图 | [查看](Codemap.md) |
+| `OPENAI_CLIENT_TEST_REWRITE_SUMMARY.md` | OpenAI 客户端测试重写记录 | [查看](OPENAI_CLIENT_TEST_REWRITE_SUMMARY.md) |
+| `SHARED_MEMORY_IMPLEMENTATION.md` | SharedMemory 设计与实现细节 | [查看](SHARED_MEMORY_IMPLEMENTATION.md) |
+
+---
+
+## 📈 CI 与质量保障 (CI & QA)
+
+- GitHub Actions Workflow：`python-ci.yml` 覆盖 Python 3.10/3.11，执行 `pip install -r requirements.txt`、`pytest --cov`。
+- 重要 Artefacts：`coverage.xml`、`htmlcov/`（可在 Actions 页面下载）。
+- 推荐在本地执行 `make test-fast` 获取快速反馈，合入前运行 `make cov` 确保覆盖率与静态检查通过。
+- 若配置有改动，请使用 `python -m utils.config_validator --path config.yaml` 验证并根据提示修复差异。
+
+---
+
+> 欢迎提交 Issue / PR，与我们一起完善多智能体协作体验！

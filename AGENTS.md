@@ -758,9 +758,11 @@ curl http://localhost:8700/health
 curl http://localhost:8050  # Studio
 
 # 测试
-python -m pytest utils/test_openai_client.py -v
-python -m pytest test_shared_memory.py -v
-python -m pytest --cov=agents --cov=utils --cov-report=html
+make test                 # 运行完整测试套件
+make test-fast            # 排除 slow/integration 标记的测试
+make cov                  # 生成 coverage.xml 与 htmlcov/
+make cov-html             # 刷新 HTML 覆盖率报告
+python scripts/verify_tests.py --run  # 快速验证关键测试文件
 
 # 运行示例
 python examples/openai_client_examples.py
@@ -806,12 +808,12 @@ async def test_my_agent_handle_message():
     assert len(results) > 0
 
 # 运行测试
-pytest test_my_expert.py -v  # 如果在根目录
-pytest --cov=agents --cov=utils --cov-report=html  # 覆盖率
+pytest tests/test_my_expert.py -v  # 如果在根目录
+make cov  # 生成 coverage.xml 与 htmlcov/
 
 # 运行 .env 配置测试
-pytest utils/test_env_config.py -v  # 环境配置测试
-python verify_test.py  # 验证测试文件结构
+pytest tests/test_env_config.py -v
+python scripts/verify_tests.py  # 查看测试文件概览或附带 --run 执行
 ```
 
 ## 13. 文档交叉引用

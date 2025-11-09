@@ -2,8 +2,9 @@ PYTHON ?= python3
 VENV ?= .venv
 VENV_BIN := $(VENV)/bin
 PIP := $(VENV_BIN)/pip
+PYTEST := $(VENV_BIN)/pytest
 
-.PHONY: install run-network studio milvus-lite clean
+.PHONY: install run-network studio milvus-lite clean test test-fast cov cov-html verify-tests
 
 $(VENV_BIN)/python:
 	$(PYTHON) -m venv $(VENV)
@@ -26,4 +27,18 @@ milvus-lite:
 		milvusdb/milvus:v2.4.4-liteserve
 
 clean:
-	rm -rf $(VENV) .milvus
+	rm -rf $(VENV) .milvus coverage.xml htmlcov
+
+verify-tests:
+	scripts/verify_tests.py
+
+test: install
+	$(PYTEST) -q
+
+test-fast: install
+	$(PYTEST) -q -m "not slow and not integration"
+
+cov: install
+	$(PYTEST) --cov-config=.coveragerc --cov=agents --cov=utils --cov-report=term-missing --cov-report=xml --cov-report=html
+
+cov-html: cov

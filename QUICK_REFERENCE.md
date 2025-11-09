@@ -113,7 +113,7 @@ Results:
 ### Pre-existing Failure: One test in utils module
 
 ```
-utils/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults
+tests/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults
 Status: FAILING (pre-existing, unrelated to CoordinationAgent)
 Impact: NONE (CoordinationAgent properly mocks configuration)
 Details: See TESTING_AND_CONFIGURATION_ANALYSIS.md
@@ -296,7 +296,7 @@ message = {
 
 ### Configuration Test Failure
 
-The failing test in `utils/test_openai_client.py` is due to:
+The failing test in `tests/test_openai_client.py` is due to:
 1. Environment variable leakage (OPENAI_BASE_URL='[REDACTED]')
 2. Incomplete test isolation (patch.dict without clear=True)
 3. load_dotenv() not being mocked

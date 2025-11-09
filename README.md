@@ -445,17 +445,23 @@ class MyExpertAgent(WorkerAgent):
 
 ```bash
 # Run OpenAI client tests
-python -m pytest utils/test_openai_client.py -v
+pytest tests/test_openai_client.py -v
 
 # Run shared memory tests
-python -m pytest test_shared_memory.py -v
+pytest tests/test_shared_memory.py -v
 
 # Run all tests
-python -m pytest -v
+make test
 
-# Run with coverage
-python -m pytest --cov=agents --cov=utils --cov-report=html
+# Run with coverage (coverage.xml + htmlcov/)
+make cov
 ```
+
+### Common Pitfalls
+
+- Run tests from the project root so the consolidated `tests/` tree is picked up by `pytest`.
+- Avoid exporting production API keys when running the suite; the shared `tests/conftest.py` fixture cleans known variables but custom keys may still leak into the environment.
+- Always invoke coverage via `make cov` or `make cov-html` so both `coverage.xml` and `htmlcov/` are refreshed consistently.
 
 ### Test Examples
 

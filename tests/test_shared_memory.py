@@ -48,7 +48,7 @@ class TestSharedMemory:
         """Test SharedMemory initialization."""
         mock_has_collection.return_value = False
         
-        with patch('agents.shared_memory.get_openai_client') as mock_client:
+        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
             memory = SharedMemory()
             
             assert memory is not None
@@ -63,7 +63,7 @@ class TestSharedMemory:
         """Test SharedMemory initialization with agent name."""
         mock_has_collection.return_value = False
         
-        with patch('agents.shared_memory.get_openai_client') as mock_client:
+        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
             memory = SharedMemory(agent_name="coordination")
             
             assert memory is not None
@@ -107,7 +107,7 @@ class TestSharedMemoryConfig:
         """Test that SharedMemory can use agent-specific configuration."""
         mock_has_collection.return_value = False
         
-        with patch('agents.shared_memory.get_openai_client') as mock_client:
+        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
             # Test with agent name
             memory = SharedMemory(agent_name="coordination")
             assert memory is not None
@@ -116,11 +116,12 @@ class TestSharedMemoryConfig:
             memory_default = SharedMemory()
             assert memory_default is not None
     
+    @patch('agents.shared_memory.get_openai_client')
     @patch('agents.shared_memory.get_config_manager')
     @patch('agents.shared_memory.connections.connect')
     @patch('agents.shared_memory.utility.has_collection')
     @patch('agents.shared_memory.SharedMemory._initialize_collections')
-    def test_config_manager_integration(self, mock_init, mock_has_collection, mock_connect, mock_get_config):
+    def test_config_manager_integration(self, mock_init, mock_has_collection, mock_connect, mock_get_config, mock_get_openai_client):
         """Test ConfigManager integration."""
         mock_config = Mock()
         mock_config._load_yaml_config.return_value = {
@@ -129,29 +130,34 @@ class TestSharedMemoryConfig:
         mock_get_config.return_value = mock_config
         mock_has_collection.return_value = False
         
-        memory = SharedMemory()
+        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
+            memory = SharedMemory()
         assert memory is not None
 
 
 class TestSharedMemoryErrorHandling:
     """Test SharedMemory error handling."""
     
+    @patch('agents.shared_memory.get_openai_client')
     @patch('agents.shared_memory.connections.connect')
-    def test_connection_error_handling(self, mock_connect):
+    def test_connection_error_handling(self, mock_connect, mock_get_openai_client):
         """Test handling of connection errors."""
         mock_connect.side_effect = Exception("Connection failed")
         
-        with pytest.raises(Exception):
-            SharedMemory()
+        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
+            with pytest.raises(Exception):
+                SharedMemory()
     
+    @patch('agents.shared_memory.get_openai_client')
     @patch('agents.shared_memory.connections.connect')
     @patch('agents.shared_memory.utility.has_collection')
-    def test_collection_error_handling(self, mock_has_collection, mock_connect):
+    def test_collection_error_handling(self, mock_has_collection, mock_connect, mock_get_openai_client):
         """Test handling of collection errors."""
         mock_has_collection.side_effect = MockMilvusException("Collection error")
         
-        with pytest.raises(MockMilvusException):
-            SharedMemory()
+        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
+            with pytest.raises(MockMilvusException):
+                SharedMemory()
 
 
 if __name__ == "__main__":

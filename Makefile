@@ -33,7 +33,7 @@ clean:
 	rm -rf $(VENV) .milvus coverage.xml htmlcov
 
 verify-tests:
-	scripts/verify_tests.py
+	PYTHONPATH=. $(PYTHON) -m tests.tools.verify_tests
 
 test: install
 	PYTHONPATH=. $(PYTEST) -q

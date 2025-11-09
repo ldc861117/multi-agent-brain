@@ -180,8 +180,8 @@ embedding = client.get_embedding_vector("test")
 - `.env.example` - New comprehensive example
 
 ### Test Files:
-- `simple_import_test.py` - Import validation
-- `validate_config.py` - Configuration validation
+- `tests/tools/verify_tests.py` - 测试布局与选择性执行辅助脚本
+- `tests/tools/network_smoke.py` - HTTP 网络冒烟测试工具
 
 ## Usage Examples
 

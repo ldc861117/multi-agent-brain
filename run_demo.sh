@@ -264,7 +264,7 @@ run_demo() {
     # 运行 DEMO 或验证脚本
     print_info "启动 DEMO..."
     if [[ "$MODE" == "verify-routing" ]]; then
-        python3 verify_multi_expert_dispatch.py
+        python3 -m tests.tools.verify_multi_expert_dispatch
     else
         python3 demo_runner.py --mode $MODE
     fi

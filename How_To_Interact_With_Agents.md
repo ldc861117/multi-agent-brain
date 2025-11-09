@@ -8,11 +8,11 @@
 
 This guide explains the correct method for interacting with the `multi-agent-brain` system. While the OpenAgents Studio UI (available at `http://localhost:8050`) is useful for monitoring the health and activity of the agent network, it is not designed for direct user interaction.
 
-All interactions, such as sending a question or a task to the agents, must be done programmatically by sending HTTP requests to the agent network service. This guide provides a step-by-step walkthrough using the provided `simple_test.py` script as an example.
+All interactions, such as sending a question or a task to the agents, must be done programmatically by sending HTTP requests to the agent network service. This guide provides a step-by-step walkthrough using the provided `tests/tools/network_smoke.py` script as an example.
 
 ## 2. The Programmatic Interaction Flow
 
-The `multi-agent-brain` system exposes an API that allows external clients to communicate with the agent network. The primary interaction script, `simple_test.py`, demonstrates the three key steps required for a successful interaction:
+The `multi-agent-brain` system exposes an API that allows external clients to communicate with the agent network. The primary interaction script, `network_smoke.py`, demonstrates the three key steps required for a successful interaction:
 
 1.  **Registration**: Your script or application must first register itself with the network to receive a temporary, unique identity (`agent_id`) and a secret for authentication.
 2.  **Send Message**: Once registered, your script can send a message (an "event") to a specific channel within the network.
@@ -20,7 +20,7 @@ The `multi-agent-brain` system exposes an API that allows external clients to co
 
 ## 3. Running the Example Script
 
-The `simple_test.py` script is the best way to understand and test the interaction flow.
+The `tests/tools/network_smoke.py` script is the best way to understand and test the interaction flow.
 
 ### Prerequisites
 
@@ -38,81 +38,69 @@ The `simple_test.py` script is the best way to understand and test the interacti
 1.  **Open a new terminal** in the root directory of the `multi-agent-brain` project.
 2.  **Run the script** using the following command:
     ```bash
-    python simple_test.py
+    python -m tests.tools.network_smoke
     ```
 3.  **Observe the output**. The script will print its progress for each of the three steps: registration, sending the message, and unregistration. You will see the payload being sent and the full JSON response from the agent network.
 
-## 4. Understanding the Code in `simple_test.py`
+## 4. Understanding the Code in `network_smoke.py`
 
-The script is divided into three main parts, corresponding to the interaction flow.
+`network_smoke.py` is organised into small helper functions so that importing the
+module does not immediately trigger HTTP calls. Each helper mirrors one stage of
+the interaction flow.
 
-### Part 1: Registration
+### Registration (`register_agent`)
 
 ```python
-# --- 1. Registration Step ---
-# A unique ID for our script instance to register with the network
-AGENT_ID = f"simple-test-script-{uuid.uuid4()}"
-secret = None
-
-print(f"--- 1. Registering Agent '{AGENT_ID}' ---")
-try:
-    reg_response = requests.post(REGISTER_URL, json={"agent_id": AGENT_ID})
-    reg_response.raise_for_status()
-    reg_data = reg_response.json()
-    
-    if reg_data.get("success"):
-        secret = reg_data.get("secret")
-        # ...
+secret = register_agent(agent_id, base_url=args.base_url)
 ```
 
--   **`AGENT_ID`**: A unique identifier is generated for this script instance.
--   **`requests.post(REGISTER_URL, ...)`**: A `POST` request is sent to the `/api/register` endpoint.
--   **`secret`**: If registration is successful, the network returns a `secret`. This secret must be included in all subsequent requests to authenticate the client.
+-   Generates a unique `agent_id` and issues a `POST /register` request.
+-   Raises an exception if the network rejects the registration or omits the
+    secret.
+-   Returns the secret that must accompany all subsequent calls.
 
-### Part 2: Sending the Message
+### Sending the Message (`send_message`)
 
 ```python
-# --- 2. Send Message Step ---
-message_text = "What is Milvus?"
-target_channel = "general"
-
-event_payload = {
-    "event_id": f"event-{uuid.uuid4()}",
-    "event_name": "user.message",
-    "source_id": AGENT_ID,
-    "target_agent_id": target_channel,
-    "payload": {"text": message_text},
-    "metadata": {},
-    "secret": secret  # Include the secret for authentication
-}
-
-response = requests.post(
-    SEND_EVENT_URL,
-    headers={"Content-Type": "application/json"},
-    json=event_payload
+payload, response = send_message(
+    agent_id,
+    secret,
+    message_text=args.message,
+    target_channel=args.channel,
+    base_url=args.base_url,
 )
 ```
 
--   **`target_channel = "general"`**: The message is sent to the `general` channel. As explained in the technical specification, this is the public entry point for all user interactions.
--   **`event_payload`**: A JSON payload is constructed.
-    -   `source_id`: The `AGENT_ID` from the registration step.
-    -   `target_agent_id`: The `general` channel.
-    -   `payload`: The actual message content is placed inside `payload.text`.
-    -   `secret`: The secret received during registration is included for authentication.
--   **`requests.post(SEND_EVENT_URL, ...)`**: The payload is sent as a `POST` request to the `/api/send_event` endpoint.
+-   Builds the JSON payload (`source_id`, `target_agent_id`, `payload.text`,
+    `secret`).
+-   Posts the payload to `/send_event` and returns both the payload and the JSON
+    response for inspection.
 
-### Part 3: Unregistration
+### Unregistration (`unregister_agent`)
 
 ```python
-# --- 3. Unregistration Step (Cleanup) ---
-if secret:
-    print(f"\n--- 3. Unregistering Agent '{AGENT_ID}' ---")
-    try:
-        unreg_response = requests.post(UNREGISTER_URL, json={"agent_id": AGENT_ID, "secret": secret})
-        # ...
+unregister_agent(agent_id, secret, base_url=args.base_url)
 ```
 
--   This final step is crucial for cleanup. It sends a `POST` request to the `/api/unregister` endpoint, including the `AGENT_ID` and the `secret`, to invalidate the session.
+-   Sends a final `POST /unregister` request to clean up the temporary agent.
+-   Executed inside a `finally` block so cleanup happens even if message sending
+    fails.
+
+### Putting everything together (`run_smoke_test`)
+
+```python
+result = run_smoke_test(
+    message_text=args.message,
+    target_channel=args.channel,
+    base_url=args.base_url,
+)
+```
+
+-   Coordinates registration, message sending, and unregistration.
+-   Returns a structured `SmokeTestResult` containing the payload, response JSON,
+    and any data returned during cleanup.
+-   The CLI entry point (`main`) exposes `--channel`, `--base-url`, and
+    `--quiet` flags so you can experiment without modifying the code.
 
 ## 5. How the System Routes Your Message
 

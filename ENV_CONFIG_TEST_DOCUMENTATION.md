@@ -89,7 +89,7 @@ make cov
 
 ```bash
 # Quick overview of key test files
-python scripts/verify_tests.py
+python -m tests.tools.verify_tests
 
 # Check test compilation
 python -m py_compile tests/test_env_config.py

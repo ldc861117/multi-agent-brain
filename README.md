@@ -84,9 +84,10 @@
 | `make test-fast` | 过滤 slow / integration 标记 | 更快反馈 |
 | `make cov` | 生成覆盖率报告 (`coverage.xml`, `htmlcov/`) | 结合 CI artefact |
 | `make cov-html` | 仅刷新 HTML 覆盖率 | 依赖 `make cov` |
-| `make verify-tests` | 运行 `scripts/verify_tests.py` 校验测试布局 | 快速一致性检查 |
+| `make verify-tests` | 运行 `python -m tests.tools.verify_tests` 校验测试布局 | 快速一致性检查 |
 
 > 所有命令默认使用 `.venv`，若已有虚拟环境可直接运行 `pytest` / `openagents` 等。
+> 📘 完整测试说明请参见 [TESTING.md](TESTING.md)。
 
 ---
 

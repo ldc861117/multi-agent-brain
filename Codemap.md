@@ -139,6 +139,6 @@ agents.<*>.handle_message()  // 使用统一客户端和 SharedMemory
 | `examples/openai_client_examples.py` | OpenAIClient 基础示例 | `python examples/openai_client_examples.py` |
 | `examples/shared_memory_usage.py` | SharedMemory CRUD + 检索示例 | `python examples/shared_memory_usage.py` |
 | `Makefile` | 快捷命令：`make install`、`make run-network`、`make milvus-lite` | 推荐统一入口 |
-| `scripts/verify_tests.py` | 快速校验测试文件存在性/命名 | `python scripts/verify_tests.py --run` |
+| `tests/tools/verify_tests.py` | 快速校验测试文件存在性/命名 | `python -m tests.tools.verify_tests --run` |
 
 > 如需更多上下文，可对照 `DOCUMENTATION_INDEX.md` 与 `OPENAI_CLIENT_TEST_REWRITE_SUMMARY.md` 获取历史变更记录。

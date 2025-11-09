@@ -144,9 +144,116 @@ class ConfigManager:
                 keys=", ".join(sorted(set(result.missing_keys))),
             )
     
+    @staticmethod
+    def _env_override_active(*names: str) -> bool:
+        """Return True if any provided environment variable is set to a non-empty value."""
+        for name in names:
+            value = os.getenv(name)
+            if value is not None and value.strip() != "":
+                return True
+        return False
+    
     def get_global_config(self) -> OpenAIConfig:
         """Get the global OpenAI configuration."""
-        return OpenAIConfig.from_env_with_fallback()
+        config = OpenAIConfig.from_env_with_fallback()
+        yaml_config = self._load_yaml_config()
+        api_config = yaml_config.get('api_config', {}) if isinstance(yaml_config, dict) else {}
+        chat_settings = api_config.get('chat_api') or {}
+        embedding_settings = api_config.get('embedding_api') or {}
+        applied_fields: Dict[str, Any] = {}
+        
+        if chat_settings:
+            if not self._env_override_active("CHAT_API_MODEL", "OPENAI_MODEL"):
+                chat_model_value = chat_settings.get('model')
+                if chat_model_value:
+                    config.chat_api.model = str(chat_model_value)
+                    applied_fields['chat_model'] = config.chat_api.model
+            if not self._env_override_active("CHAT_API_PROVIDER"):
+                provider_value = chat_settings.get('provider')
+                if provider_value:
+                    provider_candidate = str(provider_value).strip().lower()
+                    if provider_candidate:
+                        try:
+                            config.chat_api.provider = ProviderType(provider_candidate)
+                            applied_fields['chat_provider'] = config.chat_api.provider.value
+                        except ValueError:
+                            logger.warning(
+                                "Ignoring unsupported chat provider in YAML configuration",
+                                extra={"provider_raw": provider_value},
+                            )
+            for attr, env_names, caster, log_key in (
+                ("timeout", ("CHAT_API_TIMEOUT",), int, "chat_timeout"),
+                ("max_retries", ("CHAT_API_MAX_RETRIES",), int, "chat_max_retries"),
+                ("retry_delay", ("CHAT_API_RETRY_DELAY",), float, "chat_retry_delay"),
+                ("max_retry_delay", ("CHAT_API_MAX_RETRY_DELAY",), float, "chat_max_retry_delay"),
+            ):
+                if not self._env_override_active(*env_names):
+                    yaml_value = chat_settings.get(attr)
+                    if yaml_value is not None:
+                        try:
+                            setattr(config.chat_api, attr, caster(yaml_value))
+                            applied_fields[log_key] = getattr(config.chat_api, attr)
+                        except (TypeError, ValueError):
+                            logger.warning(
+                                "Invalid YAML value for chat API setting",
+                                extra={"field": attr, "value": yaml_value},
+                            )
+        
+        if embedding_settings:
+            if not self._env_override_active("EMBEDDING_API_MODEL", "EMBEDDING_MODEL"):
+                embedding_model_value = embedding_settings.get('model')
+                if embedding_model_value:
+                    config.embedding_api.model = str(embedding_model_value)
+                    applied_fields['embedding_model'] = config.embedding_api.model
+            if not self._env_override_active("EMBEDDING_API_PROVIDER"):
+                embedding_provider_value = embedding_settings.get('provider')
+                if embedding_provider_value:
+                    provider_candidate = str(embedding_provider_value).strip().lower()
+                    if provider_candidate:
+                        try:
+                            config.embedding_api.provider = ProviderType(provider_candidate)
+                            applied_fields['embedding_provider'] = config.embedding_api.provider.value
+                        except ValueError:
+                            logger.warning(
+                                "Ignoring unsupported embedding provider in YAML configuration",
+                                extra={"provider_raw": embedding_provider_value},
+                            )
+            if not self._env_override_active("EMBEDDING_DIMENSION"):
+                dimension_value = embedding_settings.get('dimension')
+                if dimension_value is not None:
+                    try:
+                        config.embedding_api.dimension = int(dimension_value)
+                        applied_fields['embedding_dimension'] = config.embedding_api.dimension
+                    except (TypeError, ValueError):
+                        logger.warning(
+                            "Invalid YAML value for embedding dimension",
+                            extra={"value": dimension_value},
+                        )
+            for attr, env_names, caster, log_key in (
+                ("timeout", ("EMBEDDING_API_TIMEOUT",), int, "embedding_timeout"),
+                ("max_retries", ("EMBEDDING_API_MAX_RETRIES",), int, "embedding_max_retries"),
+                ("retry_delay", ("EMBEDDING_API_RETRY_DELAY",), float, "embedding_retry_delay"),
+                ("max_retry_delay", ("EMBEDDING_API_MAX_RETRY_DELAY",), float, "embedding_max_retry_delay"),
+            ):
+                if not self._env_override_active(*env_names):
+                    yaml_value = embedding_settings.get(attr)
+                    if yaml_value is not None:
+                        try:
+                            setattr(config.embedding_api, attr, caster(yaml_value))
+                            applied_fields[log_key] = getattr(config.embedding_api, attr)
+                        except (TypeError, ValueError):
+                            logger.warning(
+                                "Invalid YAML value for embedding API setting",
+                                extra={"field": attr, "value": yaml_value},
+                            )
+        
+        if applied_fields:
+            logger.debug(
+                "Applied YAML defaults to global OpenAI configuration",
+                extra={"applied_fields": applied_fields},
+            )
+        
+        return config
     
     def get_agent_config(self, agent_name: str) -> OpenAIConfig:
         """Get OpenAI configuration for a specific agent with overrides.
@@ -182,31 +289,33 @@ class ConfigManager:
         
         # Apply overrides with environment variable precedence
         # Environment variables should take precedence, but YAML overrides should work when env vars are not set
+        applied_agent_fields: Dict[str, Any] = {}
         
-        # For chat model: check if environment variable is different from global default
         chat_model = global_config.chat_api.model
-        if (chat_model == "gpt-3.5-turbo" and  # Using default
-            agent_override.get('chat_model') and 
-            agent_override.get('chat_model') != "gpt-3.5-turbo"):  # YAML has non-default
-            # No environment override, use YAML override
-            chat_model = agent_override.get('chat_model')
+        chat_override_value = agent_override.get('chat_model')
+        if chat_override_value and not self._env_override_active("CHAT_API_MODEL", "OPENAI_MODEL"):
+            chat_model = str(chat_override_value)
+            applied_agent_fields['chat_model'] = chat_model
         
-        # For embedding model: same logic
         embedding_model = global_config.embedding_api.model
-        if (embedding_model == "text-embedding-3-small" and  # Using default
-            agent_override.get('embedding_model') and 
-            agent_override.get('embedding_model') != "text-embedding-3-small"):  # YAML has non-default
-            # No environment override, use YAML override
-            embedding_model = agent_override.get('embedding_model')
+        embedding_override_value = agent_override.get('embedding_model')
+        if embedding_override_value and not self._env_override_active("EMBEDDING_API_MODEL", "EMBEDDING_MODEL"):
+            embedding_model = str(embedding_override_value)
+            applied_agent_fields['embedding_model'] = embedding_model
             
-        # For embedding dimension: same logic
         embedding_dimension = global_config.embedding_api.dimension
-        if (embedding_dimension == 1536 and  # Using default
-            agent_override.get('embedding_dimension') and 
-            agent_override.get('embedding_dimension') != 1536):  # YAML has non-default
-            # No environment override, use YAML override
-            embedding_dimension = agent_override.get('embedding_dimension')
+        dimension_override_value = agent_override.get('embedding_dimension')
+        if dimension_override_value is not None and not self._env_override_active("EMBEDDING_DIMENSION"):
+            try:
+                embedding_dimension = int(dimension_override_value)
+                applied_agent_fields['embedding_dimension'] = embedding_dimension
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Invalid agent embedding dimension override",
+                    extra={"agent": agent_name, "value": dimension_override_value},
+                )
         
+        # TODO: Support per-agent overrides for retry/backoff settings if future use-cases require it.
         chat_config = ChatAPIConfig(
             api_key=global_config.chat_api.api_key,
             base_url=global_config.chat_api.base_url,
@@ -239,12 +348,13 @@ class ConfigManager:
         self._agent_configs[agent_name] = agent_config
         
         logger.info(
-            f"Applied configuration overrides for agent '{agent_name}'",
+            "Applied configuration overrides for agent",
             extra={
                 "agent": agent_name,
                 "chat_model": agent_config.chat_api.model,
                 "embedding_model": agent_config.embedding_api.model,
                 "embedding_dimension": agent_config.embedding_api.dimension,
+                "applied_fields": applied_agent_fields or None,
             }
         )
         

@@ -81,20 +81,36 @@ class ChatAPIConfig:
             load_dotenv()
         
         api_key = _get_env_value("CHAT_API_KEY", ("OPENAI_API_KEY",))
+        if api_key is None:
+            raise ValueError("CHAT_API_KEY or OPENAI_API_KEY environment variable is required")
+        api_key = api_key.strip()
         if not api_key:
             raise ValueError("CHAT_API_KEY or OPENAI_API_KEY environment variable is required")
         
-        base_url = _get_env_value("CHAT_API_BASE_URL", ("OPENAI_BASE_URL",))
-        if base_url is not None:
-            base_url = base_url.strip()
+        base_url_raw = _get_env_value("CHAT_API_BASE_URL", ("OPENAI_BASE_URL",))
+        base_url: Optional[str] = None
+        if base_url_raw is not None:
+            stripped_base_url = base_url_raw.strip()
+            if stripped_base_url:
+                base_url = stripped_base_url
         
-        model = _get_env_value("CHAT_API_MODEL", ("OPENAI_MODEL",), "gpt-3.5-turbo")
-        provider_str = _get_env_value("CHAT_API_PROVIDER", default="openai") or "openai"
+        model_raw = _get_env_value("CHAT_API_MODEL", ("OPENAI_MODEL",), "gpt-3.5-turbo")
+        model = model_raw.strip() if isinstance(model_raw, str) else "gpt-3.5-turbo"
+        if not model:
+            model = "gpt-3.5-turbo"
+        
+        provider_raw = _get_env_value("CHAT_API_PROVIDER", default="openai")
+        provider_candidate = provider_raw.strip().lower() if isinstance(provider_raw, str) else "openai"
+        if not provider_candidate:
+            provider_candidate = "openai"
         
         try:
-            provider = ProviderType(provider_str)
+            provider = ProviderType(provider_candidate)
         except ValueError:
-            logger.warning(f"Unknown provider '{provider_str}', defaulting to 'openai'")
+            logger.warning(
+                "Unknown chat provider value, defaulting to openai",
+                extra={"provider_raw": provider_raw},
+            )
             provider = ProviderType.OPENAI
         
         return cls(
@@ -129,29 +145,50 @@ class EmbeddingAPIConfig:
         if load_env:
             load_dotenv()
         
-        api_key = _get_env_value("EMBEDDING_API_KEY", ("OPENAI_API_KEY",))
-        base_url = _get_env_value("EMBEDDING_API_BASE_URL", ("OPENAI_BASE_URL",))
-        if base_url is not None:
-            base_url = base_url.strip()
+        api_key_raw = _get_env_value("EMBEDDING_API_KEY", ("OPENAI_API_KEY",))
+        api_key: Optional[str] = None
+        if api_key_raw is not None:
+            stripped_api_key = api_key_raw.strip()
+            if stripped_api_key:
+                api_key = stripped_api_key
         
-        model = _get_env_value("EMBEDDING_API_MODEL", ("EMBEDDING_MODEL",), "text-embedding-3-small")
-        provider_str = _get_env_value("EMBEDDING_API_PROVIDER", default="openai") or "openai"
+        base_url_raw = _get_env_value("EMBEDDING_API_BASE_URL", ("OPENAI_BASE_URL",))
+        base_url: Optional[str] = None
+        if base_url_raw is not None:
+            stripped_base_url = base_url_raw.strip()
+            if stripped_base_url:
+                base_url = stripped_base_url
+        
+        model_raw = _get_env_value("EMBEDDING_API_MODEL", ("EMBEDDING_MODEL",), "text-embedding-3-small")
+        model = model_raw.strip() if isinstance(model_raw, str) else "text-embedding-3-small"
+        if not model:
+            model = "text-embedding-3-small"
+        
+        provider_raw = _get_env_value("EMBEDDING_API_PROVIDER", default="openai")
+        provider_candidate = provider_raw.strip().lower() if isinstance(provider_raw, str) else "openai"
+        if not provider_candidate:
+            provider_candidate = "openai"
         
         try:
-            provider = ProviderType(provider_str)
+            provider = ProviderType(provider_candidate)
         except ValueError:
-            logger.warning(f"Unknown provider '{provider_str}', defaulting to 'openai'")
+            logger.warning(
+                "Unknown embedding provider value, defaulting to openai",
+                extra={"provider_raw": provider_raw},
+            )
             provider = ProviderType.OPENAI
         
         dimension_value = os.getenv("EMBEDDING_DIMENSION")
+        if dimension_value is not None:
+            dimension_value = dimension_value.strip()
         dimension: Optional[int] = None
-        if dimension_value is not None and dimension_value != "":
+        if dimension_value:
             try:
                 dimension = int(dimension_value)
             except ValueError:
                 logger.warning(
-                    "Invalid EMBEDDING_DIMENSION '%s', defaulting based on model",
-                    dimension_value,
+                    "Invalid EMBEDDING_DIMENSION value, defaulting based on model",
+                    extra={"dimension_value": dimension_value},
                 )
                 dimension = None
         
@@ -203,8 +240,8 @@ class OpenAIConfig:
                 embedding_config.base_url = chat_config.base_url
         except Exception as exc:
             logger.warning(
-                "Failed to load embedding API config, falling back to chat API: {error}",
-                error=str(exc),
+                "Failed to load embedding API config, falling back to chat API",
+                extra={"error": str(exc)},
             )
             embedding_config = EmbeddingAPIConfig(
                 api_key=chat_config.api_key,
@@ -339,31 +376,37 @@ class OpenAIClientWrapper:
         """Legacy property for backward compatibility. Returns chat client."""
         return self.chat_client
     
-    def _retry_with_backoff(self, func, *args, **kwargs):
+    def _retry_with_backoff(
+        self,
+        func,
+        *args,
+        retry_config: Optional[Union[ChatAPIConfig, EmbeddingAPIConfig]] = None,
+        **kwargs,
+    ):
         """Execute function with exponential backoff retry logic.
         
         Parameters
         ----------
         func:
-            Function to execute
-        *args, **kwargs:
-            Arguments to pass to the function
+            Function to execute.
+        *args:
+            Positional arguments passed to the function.
+        retry_config:
+            Optional configuration specifying retry behavior. Defaults to the chat API configuration.
+        **kwargs:
+            Keyword arguments passed to the function.
             
         Returns
         -------
         Any
-            Function result
+            Function result.
             
         Raises
         ------
         OpenAIError
-            If all retries are exhausted
+            If all retries are exhausted.
         """
-        # Determine which config to use for retry settings based on the function
-        config = self.config.chat_api
-        if hasattr(func, '__self__') and func.__self__ == self._embedding_client:
-            config = self.config.embedding_api
-        
+        config = retry_config or self.config.chat_api
         last_error = None
         
         for attempt in range(config.max_retries + 1):
@@ -372,36 +415,32 @@ class OpenAIClientWrapper:
             except Exception as e:
                 last_error = e
                 
-                # Don't retry on certain error types
                 if isinstance(e, openai.AuthenticationError):
                     logger.error("Authentication error, not retrying", extra={"error": str(e)})
                     raise OpenAIError(f"Authentication failed: {e}", e)
-                elif isinstance(e, openai.NotFoundError):
+                if isinstance(e, openai.NotFoundError):
                     logger.error("Resource not found, not retrying", extra={"error": str(e)})
                     raise OpenAIError(f"Resource not found: {e}", e)
                 
                 if attempt < config.max_retries:
-                    delay = min(
-                        config.retry_delay * (2 ** attempt),
-                        config.max_retry_delay
-                    )
+                    delay = min(config.retry_delay * (2 ** attempt), config.max_retry_delay)
                     logger.warning(
-                        f"Attempt {attempt + 1} failed, retrying in {delay:.2f}s",
+                        "Retrying after API failure",
                         extra={
                             "attempt": attempt + 1,
-                            "max_retries": config.max_retries + 1,
+                            "max_attempts": config.max_retries + 1,
                             "error": str(e),
-                            "retry_delay": delay,
-                        }
+                            "retry_delay_seconds": round(delay, 2),
+                        },
                     )
                     time.sleep(delay)
                 else:
                     logger.error(
                         "All retries exhausted",
                         extra={
-                            "attempts": attempt + 1,
+                            "attempt_count": attempt + 1,
                             "final_error": str(e),
-                        }
+                        },
                     )
         
         raise OpenAIError(f"All retries exhausted: {last_error}", last_error)
@@ -477,7 +516,8 @@ class OpenAIClientWrapper:
         try:
             result = self._retry_with_backoff(
                 self.chat_client.chat.completions.create,
-                **request_params
+                retry_config=self.config.chat_api,
+                **request_params,
             )
             
             logger.info(
@@ -553,9 +593,10 @@ class OpenAIClientWrapper:
         try:
             result = self._retry_with_backoff(
                 self.embedding_client.embeddings.create,
+                retry_config=self.config.embedding_api,
                 model=model,
                 input=texts,
-                **kwargs
+                **kwargs,
             )
             
             logger.info(

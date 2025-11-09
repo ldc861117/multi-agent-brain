@@ -227,7 +227,7 @@ def coordination_agent():
 | Component | Responsibility | Status |
 |-----------|------------------|--------|
 | OpenAI Config (`utils/openai_client.py`) | Load and manage configuration | 🔴 Has test issues |
-| OpenAI Config Tests (`utils/test_openai_client.py`) | Test configuration loading | 🔴 Failing |
+| OpenAI Config Tests (`tests/test_openai_client.py`) | Test configuration loading | 🔴 Failing |
 | CoordinationAgent (`agents/coordination/agent.py`) | Use configuration via client | ✅ Correct |
 | CoordinationAgent Tests (`test_coordination.py`) | Test agent logic | ✅ Passing |
 

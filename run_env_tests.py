@@ -10,13 +10,11 @@ def run_test():
         import pytest
         print("✅ pytest imported successfully")
         
-        # Import the test module
-        import utils.test_env_config
+        import tests.test_env_config
         print("✅ Test module imported successfully")
         
-        # Run pytest on the specific file
         result = pytest.main([
-            'utils/test_env_config.py',
+            'tests/test_env_config.py',
             '-v',
             '--tb=short'
         ])

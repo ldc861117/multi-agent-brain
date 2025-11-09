@@ -80,7 +80,7 @@ Comprehensive testing with:
 
 ### The Issue
 ```
-FAILED utils/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults
+FAILED tests/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults
 AssertionError: assert '[REDACTED]' is None
 ```
 
@@ -155,7 +155,7 @@ test_coordination.py (50+ tests):
 ### OpenAI Configuration Tests: 🔴 1 FAILING (Pre-existing)
 
 ```
-utils/test_openai_client.py:
+tests/test_openai_client.py:
 ✅ 26 tests passing
 🔴 1 test failing: test_from_env_defaults
    (Reason: Environment variable leakage - not related to CoordinationAgent)

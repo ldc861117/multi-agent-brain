@@ -15,3 +15,7 @@ pyyaml>=6.0.1
 # Quality-of-life libraries
 pydantic>=1.10.12,<3.0.0
 loguru>=0.7.0
+
+# Testing utilities
+pytest>=7.4.0
+pytest-cov>=4.1.0

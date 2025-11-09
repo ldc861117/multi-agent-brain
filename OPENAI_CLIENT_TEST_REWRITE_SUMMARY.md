@@ -2,7 +2,7 @@
 
 ## Task Completed ✅
 
-Successfully rewrote `utils/test_openai_client.py` using pytest `monkeypatch` to fix environment variable isolation issues.
+Successfully rewrote `tests/test_openai_client.py` using pytest `monkeypatch` to fix environment variable isolation issues.
 
 ## Key Improvements Made
 
@@ -97,15 +97,25 @@ def test_from_env_defaults(self, clean_env, mock_load_dotenv):
 Created `pytest.ini` with proper markers:
 ```ini
 [pytest]
-testpaths = tests utils
+minversion = 7.0
+testpaths =
+    tests
 python_files = test_*.py
 python_classes = Test*
 python_functions = test_*
-addopts = -v --strict-markers --tb=short
+addopts =
+    -ra
+    --strict-markers
+    --tb=short
 markers =
-    slow: marks tests as slow (deselect with '-m "not slow"')
-    integration: marks tests as integration tests
     unit: marks tests as unit tests
+    integration: marks tests as integration tests that may reach external services
+    slow: marks tests as slow (deselect with '-m "not slow"')
+    smoke: marks lightweight smoke tests for quick confidence
+filterwarnings =
+    ignore::DeprecationWarning
+    ignore::PendingDeprecationWarning
+    ignore::ResourceWarning
 ```
 
 ## Technical Solutions
@@ -153,7 +163,7 @@ markers =
 
 ## Files Modified/Created
 
-1. **`utils/test_openai_client.py`** - Complete rewrite (723 lines)
+1. **`tests/test_openai_client.py`** - Complete rewrite (723 lines)
    - Replaced `patch.dict()` with `monkeypatch`
    - Added comprehensive fixture system
    - Enhanced test coverage
@@ -200,27 +210,27 @@ def test_from_env_defaults(self, clean_env, mock_load_dotenv):
 
 ### Running All Tests
 ```bash
-pytest utils/test_openai_client.py -v
+pytest tests/test_openai_client.py -v
 ```
 
 ### Running Specific Test Class
 ```bash
-pytest utils/test_openai_client.py::TestOpenAIConfig -v
+pytest tests/test_openai_client.py::TestOpenAIConfig -v
 ```
 
 ### Running the Previously Failing Test
 ```bash
-pytest utils/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults -v
+pytest tests/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults -v
 ```
 
 ### Skipping Integration Tests
 ```bash
-pytest utils/test_openai_client.py -m "not integration" -v
+pytest tests/test_openai_client.py -m "not integration" -v
 ```
 
 ### Running Only Unit Tests
 ```bash
-pytest utils/test_openai_client.py -m "unit" -v
+pytest tests/test_openai_client.py -m "unit" -v
 ```
 
 ## Compliance with Requirements

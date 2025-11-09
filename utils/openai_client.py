@@ -90,27 +90,30 @@ class ChatAPIConfig:
         base_url_raw = _get_env_value("CHAT_API_BASE_URL", ("OPENAI_BASE_URL",))
         base_url: Optional[str] = None
         if base_url_raw is not None:
-            stripped_base_url = base_url_raw.strip()
-            if stripped_base_url:
-                base_url = stripped_base_url
+            base_url = base_url_raw.strip() if isinstance(base_url_raw, str) else str(base_url_raw)
         
-        model_raw = _get_env_value("CHAT_API_MODEL", ("OPENAI_MODEL",), "gpt-3.5-turbo")
-        model = model_raw.strip() if isinstance(model_raw, str) else "gpt-3.5-turbo"
-        if not model:
+        model_raw = _get_env_value("CHAT_API_MODEL", ("OPENAI_MODEL",))
+        if model_raw is None:
             model = "gpt-3.5-turbo"
+        elif isinstance(model_raw, str):
+            model = model_raw.strip()
+        else:
+            model = str(model_raw)
         
-        provider_raw = _get_env_value("CHAT_API_PROVIDER", default="openai")
-        provider_candidate = provider_raw.strip().lower() if isinstance(provider_raw, str) else "openai"
+        provider_raw = _get_env_value("CHAT_API_PROVIDER")
+        if provider_raw is None:
+            provider_candidate = "openai"
+        elif isinstance(provider_raw, str):
+            provider_candidate = provider_raw.strip()
+        else:
+            provider_candidate = str(provider_raw)
         if not provider_candidate:
             provider_candidate = "openai"
         
         try:
             provider = ProviderType(provider_candidate)
         except ValueError:
-            logger.warning(
-                "Unknown chat provider value, defaulting to openai",
-                extra={"provider_raw": provider_raw},
-            )
+            logger.warning(f"Unknown provider '{provider_candidate}', defaulting to 'openai'")
             provider = ProviderType.OPENAI
         
         return cls(
@@ -148,34 +151,38 @@ class EmbeddingAPIConfig:
         api_key_raw = _get_env_value("EMBEDDING_API_KEY", ("OPENAI_API_KEY",))
         api_key: Optional[str] = None
         if api_key_raw is not None:
-            stripped_api_key = api_key_raw.strip()
-            if stripped_api_key:
-                api_key = stripped_api_key
+            if isinstance(api_key_raw, str):
+                api_key = api_key_raw.strip()
+            else:
+                api_key = str(api_key_raw)
         
         base_url_raw = _get_env_value("EMBEDDING_API_BASE_URL", ("OPENAI_BASE_URL",))
         base_url: Optional[str] = None
         if base_url_raw is not None:
-            stripped_base_url = base_url_raw.strip()
-            if stripped_base_url:
-                base_url = stripped_base_url
+            base_url = base_url_raw.strip() if isinstance(base_url_raw, str) else str(base_url_raw)
         
-        model_raw = _get_env_value("EMBEDDING_API_MODEL", ("EMBEDDING_MODEL",), "text-embedding-3-small")
-        model = model_raw.strip() if isinstance(model_raw, str) else "text-embedding-3-small"
-        if not model:
+        model_raw = _get_env_value("EMBEDDING_API_MODEL", ("EMBEDDING_MODEL",))
+        if model_raw is None:
             model = "text-embedding-3-small"
+        elif isinstance(model_raw, str):
+            model = model_raw.strip()
+        else:
+            model = str(model_raw)
         
-        provider_raw = _get_env_value("EMBEDDING_API_PROVIDER", default="openai")
-        provider_candidate = provider_raw.strip().lower() if isinstance(provider_raw, str) else "openai"
+        provider_raw = _get_env_value("EMBEDDING_API_PROVIDER")
+        if provider_raw is None:
+            provider_candidate = "openai"
+        elif isinstance(provider_raw, str):
+            provider_candidate = provider_raw.strip()
+        else:
+            provider_candidate = str(provider_raw)
         if not provider_candidate:
             provider_candidate = "openai"
         
         try:
             provider = ProviderType(provider_candidate)
         except ValueError:
-            logger.warning(
-                "Unknown embedding provider value, defaulting to openai",
-                extra={"provider_raw": provider_raw},
-            )
+            logger.warning(f"Unknown provider '{provider_candidate}', defaulting to 'openai'")
             provider = ProviderType.OPENAI
         
         dimension_value = os.getenv("EMBEDDING_DIMENSION")

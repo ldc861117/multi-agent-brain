@@ -288,24 +288,24 @@ class ConfigManager:
             return global_config
         
         # Apply overrides with environment variable precedence
-        # Environment variables should take precedence, but YAML overrides should work when env vars are not set
+        # YAML agent overrides always take precedence to honor per-agent customization
         applied_agent_fields: Dict[str, Any] = {}
         
         chat_model = global_config.chat_api.model
         chat_override_value = agent_override.get('chat_model')
-        if chat_override_value and not self._env_override_active("CHAT_API_MODEL", "OPENAI_MODEL"):
+        if chat_override_value is not None:
             chat_model = str(chat_override_value)
             applied_agent_fields['chat_model'] = chat_model
         
         embedding_model = global_config.embedding_api.model
         embedding_override_value = agent_override.get('embedding_model')
-        if embedding_override_value and not self._env_override_active("EMBEDDING_API_MODEL", "EMBEDDING_MODEL"):
+        if embedding_override_value is not None:
             embedding_model = str(embedding_override_value)
             applied_agent_fields['embedding_model'] = embedding_model
             
         embedding_dimension = global_config.embedding_api.dimension
         dimension_override_value = agent_override.get('embedding_dimension')
-        if dimension_override_value is not None and not self._env_override_active("EMBEDDING_DIMENSION"):
+        if dimension_override_value is not None:
             try:
                 embedding_dimension = int(dimension_override_value)
                 applied_agent_fields['embedding_dimension'] = embedding_dimension

@@ -80,11 +80,15 @@
 | `make run-network` | 启动 OpenAgents HTTP 网络 | 使用 `config.yaml` 中 transports 设置 |
 | `make studio` | 启动 OpenAgents Studio UI | 便于可视化调试 |
 | `make milvus-lite` | 启动 Milvus Docker 容器 | 适合本地开发 |
-| `make test` | 运行完整 pytest (含覆盖率) | 自动设置 `PYTHONPATH=.` |
-| `make test-fast` | 过滤 slow / integration 标记 | 更快反馈 |
-| `make cov` | 生成覆盖率报告 (`coverage.xml`, `htmlcov/`) | 结合 CI artefact |
+| `make test` | 调用 `scripts/run_tests.sh` 运行完整 pytest | 自动设置 `PYTHONPATH=.` |
+| `make test-fast` | 过滤 slow / integration 标记 | 调用 `scripts/run_tests.sh -q -m "not slow and not integration"` |
+| `make lint` | 调用 `scripts/lint.sh` 运行可用的静态检查 | 无可用工具时回退到 `python -m compileall` |
+| `make format` | 调用 `scripts/format.sh` 执行格式化 | 优先使用 `ruff format`，备用 `black` |
+| `make cov` | 生成覆盖率报告 (`coverage.xml`, `htmlcov/`) | 依赖 `scripts/run_tests.sh --cov ...` |
 | `make cov-html` | 仅刷新 HTML 覆盖率 | 依赖 `make cov` |
-| `make verify-tests` | 运行 `scripts/verify_tests.py` 校验测试布局 | 快速一致性检查 |
+| `make verify-tests` | 运行 `scripts/quick_verify.py` 输出布局概览 | 使用 `--run` 可触发 pytest |
+| `make quick-verify` | 执行 `scripts/quick_verify.py --run` 快速验证核心单测 | 覆盖配置与 OpenAI 客户端路径 |
+| `make ci` | 顺序运行 lint + 覆盖率测试 | 相当于 `scripts/lint.sh` + `scripts/run_tests.sh --cov ...` |
 
 > 所有命令默认使用 `.venv`，若已有虚拟环境可直接运行 `pytest` / `openagents` 等。
 
@@ -128,7 +132,7 @@
 | `agents/shared_memory.py` | Milvus backed knowledge store | 多租户集合、批量 CRUD、`EmbeddingCache` 与指标追踪 |
 | `utils/config_manager.py` | 合并 `config.yaml` + 环境变量 + overrides | 缓存每个 Agent 的 `OpenAIConfig`，提供 `get_agent_answer_verbose` |
 | `utils/openai_client.py` | Chat/Embedding 客户端封装 | provider 无关、指数退避、批量 embedding、fallback 策略 |
-| `tests/test_env_config.py` | 配置加载单测 | 通过 monkeypatch 确保环境隔离，覆盖所有优先级场景 |
+| `tests/unit/test_env_config.py` | 配置加载单测 | 通过 monkeypatch 确保环境隔离，覆盖所有优先级场景 |
 
 ---
 

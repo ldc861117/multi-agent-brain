@@ -135,7 +135,7 @@ verbose = get_agent_answer_verbose("coordination")
    - `channels.<my_agent>.entrypoint = agents.my_agent:MyAgent`
    - 若需要协调调度，添加到 `routing.escalations.coordination`。
    - 根据需要增加 `api_config.agent_overrides.<my_agent>`。
-5. **编写测试**：在 `tests/` 下创建 `test_my_agent.py`，覆盖消息处理、错误路径与配置加载（可复用 `tests/test_env_config.py` 中的夹具）。
+5. **编写测试**：在 `tests/` 下创建 `test_my_agent.py`，覆盖消息处理、错误路径与配置加载（可复用 `tests/unit/test_env_config.py` 中的夹具）。
 6. **运行验证**：
    ```bash
    make test-fast          # 排除 slow/integration

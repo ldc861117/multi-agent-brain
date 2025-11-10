@@ -22,19 +22,19 @@ Updated `.coveragerc` with comprehensive scoping to focus coverage on testable m
 
 ### 2. New Smoke Test Files
 
-#### tests/test_imports_smoke.py (13 tests)
+#### tests/unit/test_imports_smoke.py (13 tests)
 - Basic import validation for all agent modules
 - AgentResponse dataclass testing
 - ProviderType enum validation
 - Utils module import checks
 
-#### tests/test_shared_memory_minimal.py (19 tests)
+#### tests/unit/test_shared_memory_minimal.py (19 tests)
 - MemoryMetrics dataclass coverage
 - EmbeddingCache LRU logic testing
 - SharedMemory initialization with mocked dependencies
 - No external services required
 
-#### tests/test_utils_coverage_boost.py (16 tests)
+#### tests/unit/test_utils_coverage_boost.py (16 tests)
 - ProviderType enum comprehensive tests
 - ChatAPIConfig and EmbeddingAPIConfig coverage
 - OpenAIConfig legacy property testing
@@ -96,7 +96,7 @@ TOTAL                         814    215    266     53  70.9%
 ✅ .coveragerc properly configured with comments
 
 ## Notes
-- Failing tests in `test_env_config.py` are pre-existing issues with test assertions, not new failures
+- Failing tests in `tests/unit/test_env_config.py` are pre-existing issues with test assertions, not new failures
 - All new smoke tests pass reliably
 - The scoped coverage approach allows focused testing on maintainable, unit-testable code
 - Integration-only code paths are clearly marked with pragmas and explanatory comments

@@ -45,11 +45,11 @@ def main():
     # Core demo files
     print("\n📁 核心 DEMO 文件:")
     core_files = [
-        ("demo_runner.py", "主程序入口"),
-        ("demo_modes.py", "DEMO 模式实现"),
-        ("demo_output.py", "输出格式化"),
-        ("demo_setup.py", "环境检查和设置"),
-        ("simple_demo.py", "简化版 DEMO"),
+        ("demos/runner.py", "主程序入口"),
+        ("demos/modes.py", "DEMO 模式实现"),
+        ("demos/output.py", "输出格式化"),
+        ("demos/setup.py", "环境检查和设置"),
+        ("demos/simple_demo.py", "简化版 DEMO"),
     ]
     
     core_ok = 0
@@ -66,7 +66,7 @@ def main():
     # Configuration and data files
     print("\n⚙️  配置和数据文件:")
     config_files = [
-        ("demo_questions.json", "预定义问题集"),
+        ("demos/questions.json", "预定义问题集"),
         ("run_demo.sh", "启动脚本"),
         (".env.example", "环境配置模板"),
         ("README_DEMO.md", "DEMO 使用文档"),
@@ -192,4 +192,4 @@ def main():
         return 1
 
 if __name__ == "__main__":
-    exit(main())
+    raise SystemExit(main())

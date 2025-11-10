@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 DEFAULT_TESTS: Sequence[Path] = (
-    Path("tests/test_env_config.py"),
-    Path("tests/test_openai_client.py"),
-    Path("tests/test_shared_memory.py"),
+    Path("tests/unit/test_env_config.py"),
+    Path("tests/unit/test_openai_client.py"),
+    Path("tests/unit/test_shared_memory.py"),
 )
 
 

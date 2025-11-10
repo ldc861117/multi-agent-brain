@@ -59,7 +59,7 @@
 - Maintains backward compatibility
 
 **Tests:**
-- Updated `tests/test_openai_client.py` with new structure
+- Updated `tests/unit/test_openai_client.py` with new structure
 - Tests for separate configurations
 - Tests for legacy compatibility
 - Tests for configuration manager
@@ -175,7 +175,7 @@ embedding = client.get_embedding_vector("test")
 - `config.yaml` - Added API configuration section
 - `agents/coordination/agent.py` - Use agent-specific config
 - `agents/shared_memory.py` - Accept agent_name parameter
-- `tests/test_openai_client.py` - Updated for new structure
+- `tests/unit/test_openai_client.py` - Updated for new structure
 - `AGENTS.md` - Updated documentation
 - `.env.example` - New comprehensive example
 

@@ -195,7 +195,7 @@ check_env_config() {
 run_env_check() {
     print_info "运行环境检查..."
     
-    if python3 demo_setup.py; then
+    if python3 -m demos.setup; then
         print_success "环境检查通过"
     else
         print_error "环境检查失败，请根据提示修复问题"
@@ -266,7 +266,7 @@ run_demo() {
     if [[ "$MODE" == "verify-routing" ]]; then
         python3 verify_multi_expert_dispatch.py
     else
-        python3 demo_runner.py --mode $MODE
+        python3 -m demos.runner --mode "$MODE"
     fi
 }
 

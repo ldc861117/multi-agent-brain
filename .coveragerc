@@ -5,7 +5,10 @@ source =
     utils
 omit =
     # Test files
-    tests/*
+    tests/unit/*
+    tests/integration/*
+    tests/e2e/*
+    tests/fixtures/*
     */__pycache__/*
     # Agent __init__ files (just imports)
     */__init__.py
@@ -20,6 +23,7 @@ omit =
     utils/cli.py
     # Scripts and examples
     scripts/*
+    scripts/*/*
     examples/*
     # Migrations (if present)
     **/migrations/*

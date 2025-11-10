@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `tests/test_env_config.py` file provides comprehensive test coverage for .env configuration setup, validating all aspects of environment variable loading and configuration for separated chat and embedding API endpoints.
+The `tests/unit/test_env_config.py` file provides comprehensive test coverage for .env configuration setup, validating all aspects of environment variable loading and configuration for separated chat and embedding API endpoints.
 
 ## Test Coverage Areas
 
@@ -73,13 +73,13 @@ The `tests/test_env_config.py` file provides comprehensive test coverage for .en
 
 ```bash
 # Run all .env configuration tests
-pytest tests/test_env_config.py -v
+pytest tests/unit/test_env_config.py -v
 
 # Run specific test class
-pytest tests/test_env_config.py::TestChatAPIConfiguration -v
+pytest tests/unit/test_env_config.py::TestChatAPIConfiguration -v
 
 # Run specific test method
-pytest tests/test_env_config.py::TestChatAPIConfiguration::test_api_key_loading -v
+pytest tests/unit/test_env_config.py::TestChatAPIConfiguration::test_api_key_loading -v
 
 # Run with coverage (also writes coverage.xml + htmlcov/)
 make cov
@@ -89,10 +89,10 @@ make cov
 
 ```bash
 # Quick overview of key test files
-python scripts/verify_tests.py
+python scripts/quick_verify.py
 
 # Check test compilation
-python -m py_compile tests/test_env_config.py
+python -m py_compile tests/unit/test_env_config.py
 ```
 
 ## Test Examples

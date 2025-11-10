@@ -2,11 +2,11 @@
 """Minimal shared memory test."""
 
 import sys
-import os
+from pathlib import Path
 
 # Add project root to Python path
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 
 def main():
     print("=== Minimal Shared Memory Test ===")
@@ -21,7 +21,7 @@ def main():
         # Step 2: Test shared memory imports
         print("2. Testing SharedMemory imports...")
         # Import shared memory components directly without going through agents package
-        sys.path.insert(0, os.path.join(project_root, 'agents'))
+        sys.path.insert(0, str((project_root / "agents").resolve()))
         from shared_memory import SharedMemory
         print("   ✅ SharedMemory import successful")
         

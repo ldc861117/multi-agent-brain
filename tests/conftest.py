@@ -60,3 +60,20 @@ def isolate_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     except Exception:  # pragma: no cover - module import tested elsewhere
         return
     monkeypatch.setattr(openai_client, "load_dotenv", lambda *_, **__: False, raising=False)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Automatically categorize tests based on their directory."""
+    root = Path(__file__).resolve().parent
+    unit_dir = root / "unit"
+    integration_dir = root / "integration"
+    e2e_dir = root / "e2e"
+
+    for item in items:
+        path = Path(str(item.fspath)).resolve()
+        if unit_dir in path.parents:
+            item.add_marker("unit")
+        elif integration_dir in path.parents:
+            item.add_marker("integration")
+        elif e2e_dir in path.parents:
+            item.add_marker("e2e")

@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-from demo_output import DemoOutput, DemoMode
+from .output import DemoOutput, DemoMode
 
 
 class DemoMode:

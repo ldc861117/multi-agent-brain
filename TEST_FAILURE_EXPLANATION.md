@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-There is a pre-existing test failure in `tests/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults` that is **NOT caused by** and **does NOT affect** the CoordinationAgent implementation.
+There is a pre-existing test failure in `tests/unit/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults` that is **NOT caused by** and **does NOT affect** the CoordinationAgent implementation.
 
 **Status**: ✅ CoordinationAgent is fully functional and ready for production
 
@@ -12,7 +12,7 @@ There is a pre-existing test failure in `tests/test_openai_client.py::TestOpenAI
 
 ### Error Message
 ```
-FAILED tests/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults
+FAILED tests/unit/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults
 AssertionError: assert '[REDACTED]' is None
 ```
 
@@ -107,7 +107,7 @@ In a continuous integration environment:
 ## Why This Doesn't Affect CoordinationAgent
 
 ### 1. Different Module
-- **Failing**: `tests/test_openai_client.py` (testing utilities)
+- **Failing**: `tests/unit/test_openai_client.py` (testing utilities)
 - **CoordinationAgent**: `agents/coordination/agent.py` (business logic)
 - They're orthogonal
 

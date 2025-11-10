@@ -91,6 +91,7 @@
 | `make ci` | 顺序运行 lint + 覆盖率测试 | 相当于 `scripts/lint.sh` + `scripts/run_tests.sh --cov ...` |
 
 > 所有命令默认使用 `.venv`，若已有虚拟环境可直接运行 `pytest` / `openagents` 等。
+> 详尽的测试布局与运行策略请参考 [TESTING.md](TESTING.md)。
 
 ---
 

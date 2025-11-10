@@ -70,7 +70,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     e2e_dir = root / "e2e"
 
     for item in items:
-        path = Path(item.fspath)
+        path = Path(str(item.fspath)).resolve()
         if unit_dir in path.parents:
             item.add_marker("unit")
         elif integration_dir in path.parents:

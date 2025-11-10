@@ -1,90 +1,119 @@
-import requests
+#!/usr/bin/env python3
+"""Simple scripted interaction with the OpenAgents HTTP network."""
+
+from __future__ import annotations
+
 import json
 import uuid
+from typing import Any
 
-# Define constants for the agent network
+import requests
+
 BASE_URL = "http://localhost:8700/api"
 REGISTER_URL = f"{BASE_URL}/register"
 SEND_EVENT_URL = f"{BASE_URL}/send_event"
 UNREGISTER_URL = f"{BASE_URL}/unregister"
 
-# --- 1. Registration Step ---
-# A unique ID for our script instance to register with the network
-AGENT_ID = f"simple-test-script-{uuid.uuid4()}"
-secret = None
 
-print(f"--- 1. Registering Agent '{AGENT_ID}' ---")
-try:
-    reg_response = requests.post(REGISTER_URL, json={"agent_id": AGENT_ID})
-    reg_response.raise_for_status()
-    reg_data = reg_response.json()
-    
-    if reg_data.get("success"):
-        secret = reg_data.get("secret")
-        if secret:
-            print(f"✅ Registration successful. Got secret.")
-        else:
-            raise Exception("Registration successful, but no secret was provided.")
-    else:
-        raise Exception(f"Registration failed: {reg_data.get('error_message', 'Unknown error')}")
+def register() -> tuple[str, str | None]:
+    agent_id = f"simple-test-script-{uuid.uuid4()}"
+    print(f"--- 1. Registering Agent '{agent_id}' ---")
+    try:
+        reg_response = requests.post(REGISTER_URL, json={"agent_id": agent_id}, timeout=10)
+        reg_response.raise_for_status()
+        reg_data: dict[str, Any] = reg_response.json()
+    except requests.exceptions.RequestException as exc:
+        print(f"❌ Error during registration: {exc}")
+        return agent_id, None
 
-except requests.exceptions.RequestException as e:
-    print(f"❌ Error during registration: {e}")
-    exit() # Exit if we can't register
+    if not reg_data.get("success"):
+        print(f"❌ Registration failed: {reg_data.get('error_message', 'Unknown error')}")
+        return agent_id, None
 
-# --- 2. Send Message Step ---
-print(f"\n--- 2. Sending Message ---")
+    secret = reg_data.get("secret")
+    if not secret:
+        print("❌ Registration successful, but no secret was provided.")
+        return agent_id, None
 
-message_text = "What is Milvus?"
-target_channel = "general"
+    print("✅ Registration successful. Got secret.")
+    return agent_id, secret
 
-event_payload = {
-    "event_id": f"event-{uuid.uuid4()}",
-    "event_name": "user.message",
-    "source_id": AGENT_ID,
-    "target_agent_id": target_channel,
-    "payload": {"text": message_text},
-    "metadata": {},
-    "secret": secret  # Include the secret for authentication
-}
 
-print("Payload:")
-print(json.dumps(event_payload, indent=2))
+def send_message(agent_id: str, secret: str) -> None:
+    print("\n--- 2. Sending Message ---")
 
-try:
-    response = requests.post(
-        SEND_EVENT_URL,
-        headers={"Content-Type": "application/json"},
-        json=event_payload
-    )
-    response.raise_for_status()
-    
+    event_payload = {
+        "event_id": f"event-{uuid.uuid4()}",
+        "event_name": "user.message",
+        "source_id": agent_id,
+        "target_agent_id": "general",
+        "payload": {"text": "What is Milvus?"},
+        "metadata": {},
+        "secret": secret,
+    }
+
+    print("Payload:")
+    print(json.dumps(event_payload, indent=2))
+
+    try:
+        response = requests.post(
+            SEND_EVENT_URL,
+            headers={"Content-Type": "application/json"},
+            json=event_payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        print(f"\n--- Error ---\nAn error occurred while sending the message: {exc}")
+        return
+
     print("\n--- Agent Network Response ---")
     print(f"Status Code: {response.status_code}")
-    response_json = response.json()
+    response_json: dict[str, Any] = response.json()
     print("Response JSON:")
     print(json.dumps(response_json, indent=2))
 
-    if response_json.get('data'):
+    if response_json.get("data"):
         print("\n--- Agent's Reply ---")
-        print(json.dumps(response_json['data'], indent=2))
+        print(json.dumps(response_json["data"], indent=2))
     else:
         print(f"\nNo direct agent reply in 'data' field. Message: {response_json.get('message')}")
 
-except requests.exceptions.RequestException as e:
-    print(f"\n--- Error ---")
-    print(f"An error occurred while sending the message: {e}")
 
-finally:
-    # --- 3. Unregistration Step (Cleanup) ---
-    if secret:
-        print(f"\n--- 3. Unregistering Agent '{AGENT_ID}' ---")
-        try:
-            unreg_response = requests.post(UNREGISTER_URL, json={"agent_id": AGENT_ID, "secret": secret})
-            unreg_response.raise_for_status()
-            if unreg_response.json().get("success"):
-                print("✅ Unregistration successful.")
-            else:
-                print(f"⚠️ Unregistration failed: {unreg_response.json().get('error_message')}")
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Error during unregistration: {e}")
+def unregister(agent_id: str, secret: str | None) -> None:
+    if not secret:
+        return
+
+    print(f"\n--- 3. Unregistering Agent '{agent_id}' ---")
+    try:
+        unreg_response = requests.post(
+            UNREGISTER_URL,
+            json={"agent_id": agent_id, "secret": secret},
+            timeout=10,
+        )
+        unreg_response.raise_for_status()
+        payload: dict[str, Any] = unreg_response.json()
+    except requests.exceptions.RequestException as exc:
+        print(f"❌ Error during unregistration: {exc}")
+        return
+
+    if payload.get("success"):
+        print("✅ Unregistration successful.")
+    else:
+        print(f"⚠️ Unregistration failed: {payload.get('error_message')}")
+
+
+def main() -> int:
+    agent_id, secret = register()
+    if not secret:
+        return 1
+
+    try:
+        send_message(agent_id, secret)
+    finally:
+        unregister(agent_id, secret)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

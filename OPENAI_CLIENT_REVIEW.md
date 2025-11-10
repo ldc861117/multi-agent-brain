@@ -10,7 +10,7 @@
 - `utils/openai_client.py` - 主要实现文件
 - `utils/__init__.py` - 模块导出
 - `.env.example` - 环境变量配置示例
-- `tests/test_openai_client.py` - 完整的测试套件
+- `tests/unit/test_openai_client.py` - 完整的测试套件
 
 ### ✅ 核心功能完整性
 | 功能 | 状态 | 描述 |

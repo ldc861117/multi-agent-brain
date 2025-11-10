@@ -2,7 +2,7 @@
 
 ## Task Completed ✅
 
-Successfully rewrote `tests/test_openai_client.py` using pytest `monkeypatch` to fix environment variable isolation issues.
+Successfully rewrote `tests/unit/test_openai_client.py` using pytest `monkeypatch` to fix environment variable isolation issues.
 
 ## Key Improvements Made
 
@@ -163,7 +163,7 @@ filterwarnings =
 
 ## Files Modified/Created
 
-1. **`tests/test_openai_client.py`** - Complete rewrite (723 lines)
+1. **`tests/unit/test_openai_client.py`** - Complete rewrite (723 lines)
    - Replaced `patch.dict()` with `monkeypatch`
    - Added comprehensive fixture system
    - Enhanced test coverage
@@ -210,27 +210,27 @@ def test_from_env_defaults(self, clean_env, mock_load_dotenv):
 
 ### Running All Tests
 ```bash
-pytest tests/test_openai_client.py -v
+pytest tests/unit/test_openai_client.py -v
 ```
 
 ### Running Specific Test Class
 ```bash
-pytest tests/test_openai_client.py::TestOpenAIConfig -v
+pytest tests/unit/test_openai_client.py::TestOpenAIConfig -v
 ```
 
 ### Running the Previously Failing Test
 ```bash
-pytest tests/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults -v
+pytest tests/unit/test_openai_client.py::TestOpenAIConfig::test_from_env_defaults -v
 ```
 
 ### Skipping Integration Tests
 ```bash
-pytest tests/test_openai_client.py -m "not integration" -v
+pytest tests/unit/test_openai_client.py -m "not integration" -v
 ```
 
 ### Running Only Unit Tests
 ```bash
-pytest tests/test_openai_client.py -m "unit" -v
+pytest tests/unit/test_openai_client.py -m "unit" -v
 ```
 
 ## Compliance with Requirements

@@ -6,16 +6,16 @@ Fixed `KeyError: 'agent_id'` that occurred during agent network startup when run
 - `utils/openai_client.py` (lines 236, 413, 429)
 
 ## Root Cause
-The Loguru logger format string in `demo_runner.py` required `{extra[agent_id]}` but most logging calls didn't provide this field in their `extra` dict.
+The Loguru logger format string in `demos/runner.py` required `{extra[agent_id]}` but most logging calls didn't provide this field in their `extra` dict.
 
 ## Solution
-Added a filter function to `demo_runner.py` that automatically provides a default `agent_id` value ("system") for log records that don't have one. The filter also handles two logging patterns:
+Added a filter function to `demos/runner.py` that automatically provides a default `agent_id` value ("system") for log records that don't have one. The filter also handles two logging patterns:
 1. `.bind(agent_id="...")` - agent_id in top-level extra
 2. `.info(..., extra={"agent_id": "..."})` - agent_id in nested extra
 
 ## Files Changed
 
-### Modified: `demo_runner.py`
+### Modified: `demos/runner.py`
 **Lines 399-422**: Added `add_default_agent_id()` filter function and applied it to the logger configuration.
 
 **Before:**

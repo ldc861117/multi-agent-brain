@@ -16,7 +16,7 @@ The agents initialized successfully despite these errors, indicating this was a 
 
 ## Root Cause
 
-The Loguru format string in `demo_runner.py` (line 403) included a `{extra[agent_id]}` placeholder:
+The Loguru format string in `demos/runner.py` (line 403) included a `{extra[agent_id]}` placeholder:
 
 ```python
 format="... | <cyan>{extra[agent_id]}</cyan> | ..."
@@ -62,7 +62,7 @@ Added a filter function `add_default_agent_id()` to the logger configuration tha
 
 ## Implementation
 
-The fix is in `demo_runner.py` lines 399-422:
+The fix is in `demos/runner.py` lines 399-422:
 
 ```python
 def add_default_agent_id(record):

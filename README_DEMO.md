@@ -79,13 +79,13 @@ MILVUS_URI=./multi_agent_memory.db
 
 ```bash
 # 交互式模式
-python demo_runner.py
+python -m demos.runner
 
 # 自动化模式
-python demo_runner.py --mode automated
+python -m demos.runner --mode automated
 
 # 性能测试模式
-python demo_runner.py --mode benchmark
+python -m demos.runner --mode benchmark
 ```
 
 ## 🎮 DEMO 模式
@@ -184,14 +184,15 @@ python demo_runner.py --mode benchmark
 ## 📁 文件结构
 
 ```
-demo/
-├── demo_runner.py          # 主程序入口
-├── demo_modes.py           # DEMO 模式实现
-├── demo_output.py          # 输出格式化和可视化
-├── demo_setup.py           # 环境检查和设置
-├── demo_questions.json     # 预定义问题集
-├── run_demo.sh            # 启动脚本
-└── README_DEMO.md         # 本文档
+demos/
+├── __init__.py             # Demo 包导出
+├── runner.py               # 主程序入口
+├── modes.py                # DEMO 模式实现
+├── output.py               # 输出格式化和可视化
+├── setup.py                # 环境检查和设置
+├── questions.json          # 预定义问题集
+run_demo.sh                 # 启动脚本
+README_DEMO.md              # 本文档
 ```
 
 ## 🔧 高级配置
@@ -253,10 +254,10 @@ EMBEDDING_API_PROVIDER=ollama
 ### 常见问题
 
 1. **环境检查失败**
-   ```bash
-   # 手动运行详细检查
-   python demo_setup.py
-   ```
+```bash
+# 手动运行详细检查
+python -m demos.setup
+```
 
 2. **OpenAI API 连接失败**
    - 检查 API 密钥是否正确
@@ -280,14 +281,14 @@ EMBEDDING_API_PROVIDER=ollama
 tail -f openagents.log
 
 # 调试模式运行
-python demo_runner.py --mode interactive 2>&1 | tee demo.log
+python -m demos.runner --mode interactive 2>&1 | tee demo.log
 ```
 
 ## 🎯 验收标准
 
 ✅ **已完成功能:**
 
-1. ✅ demo_runner.py 完整实现，支持 3 种执行模式
+1. ✅ demos/runner.py 完整实现，支持 3 种执行模式
 2. ✅ 能成功启动所有 Agent 并建立网络连接
 3. ✅ 可处理 15 个预定义问题，覆盖所有专家领域
 4. ✅ 正确展示 Agent 协作过程和可视化输出

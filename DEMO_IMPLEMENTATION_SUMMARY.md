@@ -10,17 +10,17 @@
 
 | 文件名 | 功能描述 | 行数 | 主要特性 |
 |--------|----------|------|----------|
-| `demo_runner.py` | 主程序入口，支持多种运行模式 | 400+ | 交互式、自动化、性能测试模式 |
-| `demo_modes.py` | DEMO 模式实现和高级测试场景 | 300+ | 压力测试、知识积累、错误恢复测试 |
-| `demo_output.py` | 美观的输出格式化和可视化 | 350+ | 彩色输出、进度条、架构图、指标展示 |
-| `demo_setup.py` | 环境检查和配置验证 | 350+ | 全面的环境检查、依赖验证、连接测试 |
-| `simple_demo.py` | 简化版 DEMO（无需 API 密钥） | 250+ | Mock 组件、完整流程演示 |
+| `demos/runner.py` | 主程序入口，支持多种运行模式 | 400+ | 交互式、自动化、性能测试模式 |
+| `demos/modes.py` | DEMO 模式实现和高级测试场景 | 300+ | 压力测试、知识积累、错误恢复测试 |
+| `demos/output.py` | 美观的输出格式化和可视化 | 350+ | 彩色输出、进度条、架构图、指标展示 |
+| `demos/setup.py` | 环境检查和配置验证 | 350+ | 全面的环境检查、依赖验证、连接测试 |
+| `demos/simple_demo.py` | 简化版 DEMO（无需 API 密钥） | 250+ | Mock 组件、完整流程演示 |
 
 ### 2. 配置和数据文件
 
 | 文件名 | 功能描述 | 内容 |
 |--------|----------|------|
-| `demo_questions.json` | 预定义问题集 | 15 个分类问题，覆盖所有专家领域 |
+| `demos/questions.json` | 预定义问题集 | 15 个分类问题，覆盖所有专家领域 |
 | `run_demo.sh` | 启动脚本 | 自动化环境检查、依赖安装、DEMO 启动 |
 | `.env.example` | 环境配置模板 | 完整的 API 配置示例 |
 | `README_DEMO.md` | DEMO 使用文档 | 详细的使用指南和故障排除 |
@@ -112,7 +112,7 @@
 
 | 验收标准 | 状态 | 实现细节 |
 |----------|------|----------|
-| 1. demo_runner.py 完整实现 | ✅ | 400+ 行，支持 3 种模式 |
+| 1. demos/runner.py 完整实现 | ✅ | 400+ 行，支持 3 种模式 |
 | 2. 成功启动所有 Agent | ✅ | 环境检查 + 实例化验证 |
 | 3. 处理预定义问题 | ✅ | 15 个问题，覆盖所有专家 |
 | 4. 展示协作过程 | ✅ | 时间线、状态、可视化 |
@@ -187,28 +187,34 @@
 ./run_demo.sh
 
 # 或直接运行
-python demo_runner.py
+python -m demos.runner
 ```
 
 ### 2. 不同模式
 ```bash
 # 交互式模式
 ./run_demo.sh interactive
+# 或
+python -m demos.runner --mode interactive
 
 # 自动化模式
 ./run_demo.sh automated
+# 或
+python -m demos.runner --mode automated
 
 # 性能测试
 ./run_demo.sh benchmark
+# 或
+python -m demos.runner --mode benchmark
 
 # 简化演示（无需 API）
-python simple_demo.py
+python -m demos.simple_demo
 ```
 
 ### 3. 环境检查
 ```bash
 # 详细环境检查
-python demo_setup.py
+python -m demos.setup
 
 # 快速验证
 python test_demo.py

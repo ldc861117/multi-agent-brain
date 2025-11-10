@@ -24,8 +24,11 @@ import click
 from loguru import logger
 
 # Add project root to path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+demo_dir = Path(__file__).resolve().parent
 
 from agents.coordination import CoordinationAgent
 from agents.python_expert import PythonExpertAgent
@@ -33,9 +36,9 @@ from agents.milvus_expert import MilvusExpertAgent
 from agents.devops_expert import DevOpsExpertAgent
 from agents.shared_memory import SharedMemory
 from utils import get_agent_config, OpenAIClientWrapper
-from demo_setup import check_environment, DemoEnvironmentError
-from demo_output import DemoOutput, DemoMode
-from demo_modes import DemoRunner
+from .setup import check_environment, DemoEnvironmentError
+from .output import DemoOutput, DemoMode
+from .modes import DemoRunner
 
 
 class MultiAgentDemo:
@@ -221,7 +224,7 @@ class MultiAgentDemo:
         self.output.print_section("🤖 Multi-Agent Brain 自动化 DEMO")
         
         # Load predefined questions
-        questions_file = project_root / "demo_questions.json"
+        questions_file = demo_dir / "questions.json"
         if not questions_file.exists():
             self.output.print_error(f"❌ 问题文件不存在: {questions_file}")
             return
@@ -392,9 +395,9 @@ def main(mode: str, config: str):
       benchmark    性能测试模式，测试并发性能
     
     EXAMPLES:
-      python demo_runner.py                          # 交互式模式
-      python demo_runner.py --mode automated         # 自动化模式
-      python demo_runner.py --mode benchmark         # 性能测试
+      python -m demos.runner                          # 交互式模式
+      python -m demos.runner --mode automated         # 自动化模式
+      python -m demos.runner --mode benchmark         # 性能测试
     """
     # Configure logging with default agent_id for records that don't have it
     def add_default_agent_id(record):

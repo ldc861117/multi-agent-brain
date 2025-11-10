@@ -381,9 +381,9 @@ def setup_demo_environment() -> bool:
             print(f"✅ 目录已存在: {directory}")
     
     # Check if demo questions file exists
-    demo_questions_file = Path("demo_questions.json")
+    demo_questions_file = Path(__file__).resolve().parent / "questions.json"
     if not demo_questions_file.exists():
-        print("⚠️  demo_questions.json 不存在，将在运行时创建默认问题集")
+        print("⚠️  demos/questions.json 不存在，将在运行时创建默认问题集")
     
     return True
 

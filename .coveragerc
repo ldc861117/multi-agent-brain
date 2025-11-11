@@ -4,43 +4,27 @@ source =
     agents
     utils
 omit =
-    # Test files
-    tests/unit/*
-    tests/integration/*
-    tests/e2e/*
-    tests/fixtures/*
-    */__pycache__/*
-    # Agent __init__ files (just imports)
-    */__init__.py
-    # Large agent implementations (scaffolds/optional)
-    agents/coordination/*
-    agents/devops_expert/*
-    agents/milvus_expert/*
-    agents/python_expert/*
-    agents/general/*
-    # CLI and __main__ entry points (integration-only)
-    agents/*/__main__.py
-    utils/cli.py
-    # Scripts and examples
+    tests/*
+    tests/*/*
     scripts/*
     scripts/*/*
+    demos/*
     examples/*
-    # Migrations (if present)
+    **/__pycache__/*
+    */__init__.py
     **/migrations/*
-    # Test files accidentally in source dirs
     utils/test_*.py
+    test_*.py
 
 [report]
 show_missing = True
 skip_empty = True
 precision = 1
 exclude_lines =
-    # Standard exclusions
     pragma: no cover
     if TYPE_CHECKING:
     raise NotImplementedError
     if __name__ == "__main__":
-    # Defensive programming patterns
     def __repr__
     def __str__
 

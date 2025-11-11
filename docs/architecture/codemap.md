@@ -25,39 +25,49 @@ multi-agent-brain/
 ├── agents/
 │   ├── __init__.py
 │   ├── base.py                    # BaseAgent & AgentResponse
-│   ├── coordination/              # CoordinationAgent orchestrator
-│   ├── general/                   # Default user-facing agent
-│   ├── python_expert/             # Python scaffold
-│   ├── milvus_expert/             # Milvus scaffold
-│   ├── devops_expert/             # DevOps scaffold
-│   └── shared_memory.py           # Milvus-backed knowledge store
+│   ├── coordination/
+│   ├── general/
+│   ├── python_expert/
+│   ├── milvus_expert/
+│   ├── devops_expert/
+│   └── shared_memory.py
+├── docs/
+│   ├── README.md                  # Documentation hub
+│   ├── _toc.md                    # Navigation stub
+│   ├── getting-started/
+│   │   └── quickstart.md
+│   ├── configuration/
+│   │   └── guide.md
+│   ├── testing/
+│   │   └── README.md
+│   ├── architecture/
+│   │   ├── overview.md
+│   │   └── codemap.md             # Current document
+│   ├── guides/
+│   │   ├── interaction.md
+│   │   ├── quick-reference.md
+│   │   └── troubleshooting.md
+│   ├── adr/
+│   │   ├── README.md
+│   │   └── 2024-11-11-openai-client-testing.md
+│   └── archive/
+│       └── *.md                   # Legacy reports
 ├── utils/
-│   ├── __init__.py                # Public utilities exports
-│   ├── config_manager.py          # YAML + env + overrides loader
-│   ├── config_validator.py        # Schema validation & CLI
-│   └── openai_client.py           # LLM client abstraction
+│   ├── __init__.py
+│   ├── config_manager.py
+│   ├── config_validator.py
+│   └── openai_client.py
 ├── tests/
-│   ├── conftest.py                # Pytest fixtures (env isolation, markers)
-│   ├── fixtures/                  # Shared pytest fixtures
-│   ├── unit/                      # Unit suites (config, OpenAI, shared memory)
-│   │   ├── test_config_validator.py
-│   │   ├── test_env_config.py
-│   │   ├── test_imports_smoke.py
-│   │   ├── test_openai_client.py
-│   │   ├── test_shared_memory.py
-│   │   ├── test_shared_memory_minimal.py
-│   │   └── test_utils_coverage_boost.py
+│   ├── conftest.py
+│   ├── unit/
 │   ├── integration/
-│   │   ├── test_demo_cli_smoke.py
-│   │   └── test_lm.py
-│   └── e2e/                       # Placeholder for future end-to-end tests
-├── config.yaml                    # Production-ready network config
-├── config.default.yaml            # Template for validator repair
-├── requirements.txt               # Dependency lock
-├── Makefile                       # install/test/coverage helpers
-├── README.md                      # 人类友好 & 英文摘要
-├── AGENTS.md                      # 机器可读 Agent 手册
-└── Codemap.md                     # 当前文档
+│   └── e2e/
+├── config.yaml
+├── config.default.yaml
+├── requirements.txt
+├── Makefile
+├── README.md
+└── AGENTS.md
 ```
 
 ---
@@ -140,16 +150,19 @@ agents.<*>.handle_message()  // 使用统一客户端和 SharedMemory
 
 ## 6. 文档 & 脚本 (Docs & Scripts)
 
-| 资源 | 描述 | 用法 |
-|------|------|------|
-| `README.md` | 项目总览、Quickstart、配置优先级、Troubleshooting | 面向人类 + 英文补充 |
-| `AGENTS.md` | AI Agent 作业手册（中文主、英文辅） | 自动化 Agent 读取、任务映射 |
-| `Codemap.md` | **当前文档**，结构 & 数据流 | 代码定位与审查参考 |
-| `examples/openai_client_examples.py` | OpenAIClient 基础示例 | `python examples/openai_client_examples.py` |
-| `examples/shared_memory_usage.py` | SharedMemory CRUD + 检索示例 | `python examples/shared_memory_usage.py` |
-| `Makefile` | 快捷命令：`make install`、`make run-network`、测试/覆盖率封装 | 推荐统一入口 |
-| `scripts/quick_verify.py` | 快速校验测试文件存在性/命名 | `python scripts/quick_verify.py --run` |
-| `scripts/run_tests.sh` | Pytest 运行封装（环境变量、默认参数） | `./scripts/run_tests.sh -q` |
-| `scripts/lint.sh` / `scripts/format.sh` | Lint / Format 工具统一入口 | `make lint`、`make format` |
+| Resource | Description | Usage |
+|----------|-------------|-------|
+| [Root README](../../README.md) | Project overview, badges, and a launch checklist. | Entry point for newcomers; links into the documentation tree. |
+| [Documentation Hub](../README.md) | Central index for guides, architecture notes, and troubleshooting. | Bookmark for day-to-day navigation. |
+| [AGENTS.md](../../AGENTS.md) | Machine-readable agent handbook (Chinese primary / English summary). | Required reading when creating or extending agents. |
+| [Quickstart](../getting-started/quickstart.md) | Environment setup & network launch steps. | Follow after cloning the repo. |
+| [Testing Reference](../testing/README.md) | Pytest layout, Makefile helpers, coverage workflow. | Use before pushing changes. |
+| [Troubleshooting](../guides/troubleshooting.md) | Common failure modes across Milvus and LLM providers. | Consult when debugging runtime issues. |
+| `examples/openai_client_examples.py` | OpenAIClient usage samples. | `python examples/openai_client_examples.py` |
+| `examples/shared_memory_usage.py` | SharedMemory CRUD & search walkthrough. | `python examples/shared_memory_usage.py` |
+| `Makefile` | Unified entry point for install/run/test commands. | `make install`, `make run-network`, etc. |
+| `scripts/run_tests.sh` | Pytest wrapper with default arguments. | `./scripts/run_tests.sh -q` |
+| `scripts/quick_verify.py` | Fast sanity check of unit suites. | `python scripts/quick_verify.py --run` |
+| `scripts/lint.sh` / `scripts/format.sh` | Wrapper scripts for linting/formatting. | `make lint`, `make format` |
 
-> 如需更多上下文，可对照 `DOCUMENTATION_INDEX.md` 与 `OPENAI_CLIENT_TEST_REWRITE_SUMMARY.md` 获取历史变更记录。
+> For historical reports, refer to the [archive index](../archive/README.md) and the [ADR log](../adr/README.md).

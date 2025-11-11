@@ -1,4 +1,6 @@
 # Multi-Agent Brain DEMO
+> [!WARNING] **Archived:** This document is retained for historical context and may be outdated. See [Documentation Hub](../README.md) for current guidance.
+
 
 这是一个完整的多智能体协作系统演示，展示了 CoordinatorAgent 与各专家 Agent 的协作流程。
 

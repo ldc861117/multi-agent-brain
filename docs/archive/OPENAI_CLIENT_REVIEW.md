@@ -1,4 +1,6 @@
 # OpenAI 客户端实现代码审查报告
+> [!WARNING] **Archived:** This document is retained for historical context and may be outdated. See [Documentation Hub](../README.md) for current guidance.
+
 
 ## 概述
 

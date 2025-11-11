@@ -95,10 +95,10 @@ Coverage settings are defined in `.coveragerc`. Notable points:
 1. Place deterministic logic under `tests/unit/`.
 2. Use `tests/integration/` for smoke / CLI / network interactions that may rely on external services.
 3. Drop future full workflows into `tests/e2e/` and mark them appropriately.
-4. Update this document and `Codemap.md` if you introduce new suites or helper scripts.
+4. Update this document and [Code Map](../architecture/codemap.md) if you introduce new suites or helper scripts.
 
 ---
 
-For additional historical context refer to:
-- `OPENAI_CLIENT_TEST_REWRITE_SUMMARY.md` – deep dive on environment isolation patterns.
-- `ENV_CONFIG_TEST_DOCUMENTATION.md` – exhaustive breakdown of configuration-focused tests.
+Additional history:
+- [Archive: OPENAI_CLIENT_TEST_REWRITE_SUMMARY](../archive/OPENAI_CLIENT_TEST_REWRITE_SUMMARY.md) – deep dive on environment isolation patterns.
+- [Archive: ENV_CONFIG_TEST_DOCUMENTATION](../archive/ENV_CONFIG_TEST_DOCUMENTATION.md) – exhaustive breakdown of configuration-focused tests.

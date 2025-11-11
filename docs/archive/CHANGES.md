@@ -1,4 +1,6 @@
 # Changes Summary: Fix Loguru agent_id KeyError
+> [!WARNING] **Archived:** This document is retained for historical context and may be outdated. See [Documentation Hub](../README.md) for current guidance.
+
 
 ## Issue
 Fixed `KeyError: 'agent_id'` that occurred during agent network startup when running `run_demo.sh`. The error appeared in logging calls from:

@@ -91,6 +91,21 @@ Reference [.env.example](.env.example) for annotated samples and consult [docs/c
 
 Detailed steps live in [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md).
 
+### Operator dashboard (CLI)
+
+Launch the read-only operator dashboard to inspect agent status, recent task
+runs, the resolved configuration snapshot, and a filtered log tail:
+
+```bash
+make operator
+# or
+python -m tools.operator --log-file openagents.log
+```
+
+Use `--filter-agent`, `--filter-run`, or `--filter-correlation` to narrow the log
+pane, and adjust `--refresh` for slower or faster updates. Secrets such as API
+keys are automatically redacted in the configuration view.
+
 ### Full local stack (Milvus)
 
 1. Ensure Docker is available, then start Milvus Lite:

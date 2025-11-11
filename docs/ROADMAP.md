@@ -39,6 +39,7 @@
      2. Read-only view listing active agents, recent coordination requests, and per-agent overrides (`ConfigManager.get_agent_config`).
      3. Log pane wired to structured logs (see observability milestone) with filtering by correlation ID.
    - **Success metrics**: Operators can identify active agents and last 10 tasks in <3 clicks (or keystrokes); <200ms latency to refresh data snapshot on local stack.
+   - ✅ **Status**: Rich CLI dashboard available via `make operator` / `python -m tools.operator`, providing read-only visibility without backend changes.
 
 2. **Milestone: Visual orchestration concept (LangGraph or equivalent)**
    - **Intent**: Illustrate plan → dispatch → synthesis graph while preserving companionship-first routing.

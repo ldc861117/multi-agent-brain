@@ -4,84 +4,132 @@
 
 > OpenAgents-powered multi-agent network with Milvus-backed shared memory and provider-agnostic LLM access.
 
-## Highlights
+---
 
-- 🤝 **Coordinated experts** – `CoordinationAgent` routes work to Python, Milvus, and DevOps specialists.
-- 🧠 **Persistent memory** – Milvus collections plus an embedding cache capture knowledge and collaboration history.
-- 🔌 **Configurable providers** – Split `CHAT_API_*` and `EMBEDDING_API_*` settings with per-agent overrides in `config.yaml`.
-- 🧩 **Extensible scaffolding** – Implement any new agent by inheriting `BaseAgent` and wiring it into `channels`.
+## Status at a Glance
 
-## Quickstart
+- ✅ **Coordination pipeline implemented** — [CoordinationAgent](agents/coordination/agent.py) analyses incoming questions, retrieves Milvus-backed knowledge, dispatches experts, and persists collaboration traces. The flow is exercised end-to-end in [examples/coordination_agent_example.py](examples/coordination_agent_example.py) and the offline harness at [scripts/verify_multi_expert_dispatch.py](scripts/verify_multi_expert_dispatch.py).
+- ✅ **Provider-agnostic configuration** — `ConfigManager` separates chat and embedding providers with per-agent overrides. Behaviour and precedence are covered by [utils/test_env_config.py](utils/test_env_config.py) and [tests/unit/test_openai_client.py](tests/unit/test_openai_client.py).
+- ✅ **Shared memory with caching & metrics** — [SharedMemory](agents/shared_memory.py) integrates with Milvus, exposes an embedding cache, and tracks usage statistics. Coverage lives in [tests/unit/test_shared_memory.py](tests/unit/test_shared_memory.py) and [tests/unit/test_shared_memory_minimal.py](tests/unit/test_shared_memory_minimal.py).
+- 📚 **Documentation-first workflow** — Comprehensive guides reside in [docs/README.md](docs/README.md), with agent specifics in [AGENTS.md](AGENTS.md) and testing practices in [docs/testing/README.md](docs/testing/README.md).
 
-1. Clone the repository and enter the directory.
-2. Create a virtual environment and install dependencies:
+**Limitations**
+
+- Specialist agents (`python_expert`, `milvus_expert`, `devops_expert`) currently return placeholder guidance until runtime tools are attached.
+- Interactive runs require valid LLM credentials; unit tests stub network calls, but launching the network will target the configured providers.
+- Persistent memory assumes an accessible Milvus endpoint. Without it, development falls back to local stubs and some features remain inert.
+
+## Architecture Overview
+
+The network is defined in [config.yaml](config.yaml) as an OpenAgents deployment exposing HTTP (8700) and gRPC (8600) transports. Messages enter through the public `general` channel, escalate to the `CoordinationAgent`, and fan out to domain specialists. Shared context is stored in Milvus via `SharedMemory`, while `OpenAIClientWrapper` mediates chat and embedding providers resolved by `ConfigManager`.
+
+```text
+User → general channel → CoordinationAgent
+              │
+              ├─ python_expert / milvus_expert / devops_expert
+              │
+              └─ SharedMemory ↔ Milvus (vectors via OpenAIClientWrapper)
+                        │
+                        └─ ConfigManager (chat / embedding defaults + overrides)
+```
+
+Deep dives and diagrams live in [docs/architecture/overview.md](docs/architecture/overview.md) and the [code map](docs/architecture/codemap.md).
+
+## Agents Catalog
+
+| Agent | Entrypoint | Responsibility | Configuration hooks |
+| --- | --- | --- | --- |
+| `general` | `agents.general:GeneralAgent` | Public entry point that greets users and forwards work to coordination. | `channels.general` in `config.yaml`<br>`routing.default_target` |
+| `coordination` | `agents.coordination:CoordinationAgent` | Analyses prompts, retrieves shared knowledge, dispatches experts, and writes collaboration history. | `channels.coordination`<br>`routing.escalations.coordination`<br>`api_config.agent_overrides.coordination`<br>Env overrides such as `COORDINATION_AGENT_MODEL` |
+| `python_expert` | `agents.python_expert:PythonExpertAgent` | Placeholder for Python debugging and future code execution support. | `channels.python_expert`<br>`api_config.agent_overrides.python_expert`<br>Env: `PYTHON_EXPERT_MODEL`, `PYTHON_EXPERT_EMBEDDING_MODEL` |
+| `milvus_expert` | `agents.milvus_expert:MilvusExpertAgent` | Placeholder for Milvus sizing, schema, and tuning advice. | `channels.milvus_expert`<br>`api_config.agent_overrides.milvus_expert` |
+| `devops_expert` | `agents.devops_expert:DevOpsExpertAgent` | Placeholder for CI/CD and infrastructure questions. | `channels.devops_expert`<br>`api_config.agent_overrides.devops_expert` |
+
+All agents inherit from `BaseAgent` and use `AgentResponse`. See [AGENTS.md](AGENTS.md) for the machine-readable playbook, including escalation rules and onboarding checklists.
+
+## Configuration Matrix
+
+| Layer | Location | Keys / Commands | Notes |
+| --- | --- | --- | --- |
+| Chat API | `.env` (`CHAT_API_*`) | `CHAT_API_BASE_URL`, `CHAT_API_KEY`, `CHAT_API_PROVIDER`, `CHAT_API_MODEL`, `CHAT_API_TIMEOUT`, `CHAT_API_MAX_RETRIES`, … | Required for chat completions. Providers include `openai`, `ollama`, or `custom`. |
+| Embedding API | `.env` (`EMBEDDING_API_*`) | `EMBEDDING_API_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_API_PROVIDER`, `EMBEDDING_API_MODEL`, `EMBEDDING_API_TIMEOUT`, … | Optional key for local providers; falls back to chat API settings when unset. |
+| Legacy fallback | `.env` (`OPENAI_*`) | `OPENAI_API_KEY`, `OPENAI_API_BASE_URL` | Read only when the new `CHAT_API_*` / `EMBEDDING_API_*` variables are missing. |
+| Per-agent env overrides | `.env` | `COORDINATION_AGENT_MODEL`, `PYTHON_EXPERT_EMBEDDING_MODEL`, etc. | Highest precedence for individual agents; override YAML defaults. |
+| YAML defaults | [`config.yaml`](config.yaml) → `api_config.chat_api` / `embedding_api` | Provider, model, timeout, retry configuration, embedding dimensions. | Applies when no environment override is present. |
+| Agent overrides (YAML) | `config.yaml → api_config.agent_overrides.<agent>` | `chat_model`, `embedding_model`, `embedding_dimension`, `answer_verbose`. | Used by `utils.get_agent_config("<agent>")` and `OpenAIClientWrapper`. |
+| Network wiring | `config.yaml → channels`, `routing` | Channel entrypoints, visibility, escalation targets. | Controls which agents the coordination layer can dispatch to. |
+| Validation tooling | CLI | `python -m utils.config_validator --path config.yaml --default config.default.yaml` | Validates and optionally repairs YAML against the template. |
+
+Reference [.env.example](.env.example) for annotated samples and consult [docs/configuration/guide.md](docs/configuration/guide.md) for precedence details.
+
+## Setup & Usage Modes
+
+### Quickstart (minimal)
+
+1. Install dependencies and bootstrap the virtual environment:
    ```bash
    make install
    ```
-3. Copy the environment template and fill in keys (OpenAI, Milvus, etc.):
+2. Copy the environment template and populate provider keys:
    ```bash
    cp .env.example .env
+   # Set CHAT_API_* and (optionally) EMBEDDING_API_* values
    ```
-4. Start Milvus Lite (optional) and launch the agent network:
+3. Launch the OpenAgents network:
    ```bash
-   make milvus-lite  # docker required
    make run-network
    ```
-5. Verify health and run the fast test suite:
+4. Smoke-test the deployment:
    ```bash
    curl http://localhost:8700/health
    make test-fast
    ```
 
-Detailed setup instructions live in [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md).
+Detailed steps live in [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md).
 
-## Documentation
+### Full local stack (Milvus)
 
-All project documentation has moved under `docs/`.
+1. Ensure Docker is available, then start Milvus Lite:
+   ```bash
+   make milvus-lite
+   ```
+2. Point the agents at the running instance (in `.env` or your shell):
+   ```bash
+   export MILVUS_URI=http://localhost:19530
+   ```
+3. Run `make run-network` (and optionally `make studio`) to bring up the transports and UI.
+4. Monitor Milvus connectivity with `curl http://localhost:8700/health` or the `SharedMemory.health_check()` helper.
 
-- [Documentation Hub](docs/README.md) – table of contents for every guide.
-- [Configuration Guide](docs/configuration/guide.md) – precedence, overrides, provider notes.
-- [Testing Reference](docs/testing/README.md) – pytest layout, Makefile helpers, coverage workflow.
-- [Architecture Overview](docs/architecture/overview.md) – system diagram and component responsibilities.
-- [Quick Reference](docs/guides/quick-reference.md) – command and API cheat sheet.
-- [Troubleshooting](docs/guides/troubleshooting.md) – common failure scenarios and fixes.
-- [ADR Log](docs/adr/README.md) – accepted decisions; archives capture legacy reports.
+Alternative Milvus deployments (cloud or existing clusters) just require updating `MILVUS_URI` and credentials.
 
-## Everyday Commands
+### Offline / CI mode
 
-| Command | Description |
-|---------|-------------|
-| `make install` | Bootstrap `.venv` and install dependencies. |
-| `make run-network` | Launch HTTP and gRPC transports using `config.yaml`. |
-| `make studio` | Open the OpenAgents Studio UI on port 8050. |
-| `make test` / `make test-fast` | Run full or unit-only pytest suites. |
-| `make cov` | Execute pytest with coverage reporting. |
-| `make quick-verify` | Lightweight smoke validation of critical tests. |
+- Unit suites stub external providers via `pytest.MonkeyPatch`, so `make test-fast` runs without real API keys or Milvus.
+- Use `make quick-verify` or `python scripts/verify_multi_expert_dispatch.py` for deterministic routing checks.
+- Keep `.env` values blank or dummy during CI; the tests rely on [`tests/conftest.py`](tests/conftest.py) to guard against environment leakage.
 
-Find more snippets in the [Quick Reference](docs/guides/quick-reference.md).
+## Demos & Examples
 
-## Architecture at a Glance
+- `run_demo.sh` — interactive bootstrap that validates Python, virtualenv, `.env`, and `config.yaml` before optionally launching the network.
+- `demos/runner.py` and `demos/simple_demo.py` — orchestrated walkthroughs that exercise coordination and shared memory flows with mocked providers.
+- `examples/coordination_agent_example.py` — minimal async script calling `CoordinationAgent.handle_message()`.
+- `examples/shared_memory_usage.py` — programmatic reference for storing, searching, and inspecting Milvus-backed knowledge.
+- `examples/openai_client_examples.py` — snippets showcasing chat and embedding usage through `OpenAIClientWrapper`.
 
-```text
-User → CoordinationAgent → Specialist Agents (Python, Milvus, DevOps)
-           │                     │
-           ▼                     ▼
-      SharedMemory ───→ OpenAIClientWrapper (chat + embedding)
-```
+Each script documents its prerequisites; prefer running them from an activated virtual environment.
 
-Shared state persists in Milvus collections (`expert_knowledge`, `collaboration_history`, etc.), while the provider layer is configurable per agent via `ConfigManager`.
+## Troubleshooting
 
-## Additional Resources
+- **`agent_overrides` appear ignored** — Environment variables take precedence; unset conflicting `CHAT_API_*` / `EMBEDDING_API_*` entries and call `from utils.config_manager import reload_config; reload_config()` or restart the process.
+- **Milvus connection failures** — Confirm `MILVUS_URI` points to a reachable endpoint and (for local development) Docker is running `make milvus-lite`. The troubleshooting table in [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) lists common error codes.
+- **Unexpected network calls during tests** — Follow the fixtures in [tests/conftest.py](tests/conftest.py) and rely on `pytest.MonkeyPatch`; avoid `patch.dict` or loading `.env` files inline.
+- **Rate limits or timeouts** — Adjust `CHAT_API_MAX_RETRIES`, `CHAT_API_MAX_RETRY_DELAY`, or switch providers using the configuration matrix above.
 
-- [AGENTS manual](AGENTS.md) – machine-readable onboarding for every agent.
-- [config.yaml](config.yaml) – default transport, provider, and override settings.
-- [Makefile](Makefile) – source of all developer command shortcuts.
+## Documentation Map
 
-## Contributing
-
-1. Fork or branch and follow the quickstart steps above.
-2. Update or add documentation under `docs/` rather than scattering Markdown in the root.
-3. Run `make test-fast` (or `make test`) before opening a PR.
-4. Record significant architectural changes as ADRs and link them from relevant guides.
+- [docs/README.md](docs/README.md) — navigation hub for all guides.
+- [AGENTS.md](AGENTS.md) — detailed agent roles, escalation rules, and onboarding flow.
+- [docs/testing/README.md](docs/testing/README.md) — pytest layout, Makefile helpers, and coverage workflow.
+- [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) — extended diagnostics and resolutions.
 
 Your feedback and contributions keep the multi-agent-brain evolving—thank you!

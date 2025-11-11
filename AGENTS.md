@@ -2,6 +2,8 @@
 
 > 专为 AI Coding Agents 设计的结构化作战手册，帮助它们在 **multi-agent-brain** 项目中快速定位职责与接口。
 > *English summary: Machine-readable playbook for autonomous coding agents working inside the multi-agent-brain repository.*
+>
+> 📚 Documentation hub: [docs/README.md](docs/README.md) · configuration, testing, and troubleshooting guides are referenced here rather than duplicated.
 
 ---
 
@@ -237,4 +239,4 @@ print({
 | agent_overrides 未生效 | `CoordinationAgent` 日志仍显示默认模型 | 确认删除同名环境变量，执行 `utils.reload_config()` 或重启进程 |
 | 并发任务失败 | `CoordinationAgent.dispatch_to_experts` 日志 | 检查目标 Agent 是否注册，必要时将条目加入 `channels` 与 `routing` |
 
-> 更多运行命令请参考 [README.md](README.md) 与 [Codemap.md](Codemap.md)。
+> 更多运行命令请参考 [README.md](README.md) 与 [Code Map](docs/architecture/codemap.md)。

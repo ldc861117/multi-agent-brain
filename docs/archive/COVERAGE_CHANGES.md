@@ -1,4 +1,6 @@
 # Coverage Improvements - Summary
+> [!WARNING] **Archived:** This document is retained for historical context and may be outdated. See [Documentation Hub](../README.md) for current guidance.
+
 
 ## Overview
 Successfully raised CI coverage from 42.4% to **70.9%** (≥60% requirement met) by implementing strategic scoping and smoke tests.

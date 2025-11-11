@@ -1,4 +1,6 @@
 # Configuration Structure Migration Guide
+> [!WARNING] **Archived:** This document is retained for historical context and may be outdated. See [Documentation Hub](../README.md) for current guidance.
+
 
 ## Overview
 

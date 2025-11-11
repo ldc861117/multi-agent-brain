@@ -35,7 +35,7 @@ from agents.python_expert import PythonExpertAgent
 from agents.milvus_expert import MilvusExpertAgent
 from agents.devops_expert import DevOpsExpertAgent
 from agents.shared_memory import SharedMemory
-from utils import get_agent_config, OpenAIClientWrapper
+from utils import configure_logging, get_agent_config, OpenAIClientWrapper
 from .setup import check_environment, DemoEnvironmentError
 from .output import DemoOutput, DemoMode
 from .modes import DemoRunner
@@ -399,32 +399,10 @@ def main(mode: str, config: str):
       python -m demos.runner --mode automated         # 自动化模式
       python -m demos.runner --mode benchmark         # 性能测试
     """
-    # Configure logging with default agent_id for records that don't have it
-    def add_default_agent_id(record):
-        """Add default agent_id to log records that don't have one."""
-        # Check if agent_id is in the top-level extra (from .bind())
-        if "agent_id" in record["extra"]:
-            return True
-        
-        # Check if agent_id is in nested extra (from .info(..., extra={...}))
-        if "extra" in record["extra"] and "agent_id" in record["extra"]["extra"]:
-            # Promote it to top-level for the format string
-            record["extra"]["agent_id"] = record["extra"]["extra"]["agent_id"]
-            return True
-        
-        # No agent_id found, set default
-        record["extra"]["agent_id"] = "system"
-        return True
-    
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[agent_id]}</cyan> | <level>{message}</level>",
-        level="INFO",
-        filter=add_default_agent_id
-    )
-    
-    # Run demo
+    configure_logging()
+    demo_logger = logger.bind(agent="demo_runner")
+    demo_logger.info("Launching demo runner", extra={"mode": mode, "config": config})
+
     demo = MultiAgentDemo(mode=mode, config_file=config)
     asyncio.run(demo.run())
 

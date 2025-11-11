@@ -56,7 +56,9 @@
      3. Document alert thresholds and manual triage steps in `docs/guides/troubleshooting.md`.
    - **Success metrics**: 95th percentile coordination latency displayed; errors include correlation IDs; operators can trace a failing request end-to-end within 5 minutes.
 
-> **Exit Criteria for H2**: Operators observe real-time agent activity and trace orchestrations visually without modifying dispatch mechanics.
+   _Status_: Structured JSON logging, correlation ID propagation, and a lightweight `/metrics` endpoint are available via `utils/observability.py` (validated by `tests/unit/test_observability.py`).
+
+   > **Exit Criteria for H2**: Operators observe real-time agent activity and trace orchestrations visually without modifying dispatch mechanics.
 
 ### H3 · Productization (Extensibility & packaging)
 

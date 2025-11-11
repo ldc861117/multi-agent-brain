@@ -19,7 +19,14 @@ from loguru import logger
 
 from agents.base import AgentResponse, BaseAgent
 from agents.shared_memory import SharedMemory
-from utils import get_agent_config, get_agent_answer_verbose, get_openai_client, OpenAIClientWrapper
+from utils import (
+    OpenAIClientWrapper,
+    correlation_context,
+    get_agent_answer_verbose,
+    get_agent_config,
+    get_correlation_id,
+    metrics_registry,
+)
 
 
 class CoordinationAgent(BaseAgent):
@@ -123,7 +130,7 @@ class CoordinationAgent(BaseAgent):
         self.verbose = get_agent_answer_verbose(self.name)
         
         self.memory = SharedMemory(agent_name=self.name)
-        self.logger = logger.bind(agent_id="coordination")
+        self.logger = logger.bind(agent="coordination")
 
         # Mapping of expert types to channel names
         self.expert_channels = {
@@ -550,6 +557,8 @@ Guidelines:
                 key=lambda x: x.get("similarity_score", 0), reverse=True
             )
 
+            metrics_registry.record_retrieval_hits(self.name, len(all_results))
+
             self.logger.info(
                 "Retrieved similar knowledge",
                 extra={
@@ -592,6 +601,7 @@ Guidelines:
             - expert_responses: Dict mapping expert names to their responses
             - status: "completed", "partial", or "failed"
         """
+        correlation_id = get_correlation_id()
         interaction_id = str(uuid.uuid4())
         self.logger.info(
             "Starting expert dispatch",
@@ -619,6 +629,7 @@ Guidelines:
             "context": context,
             "tenant_id": tenant_id,
             "timestamp": datetime.utcnow().isoformat(),
+            "correlation_id": correlation_id,
         }
 
         # Record collaboration state
@@ -627,6 +638,7 @@ Guidelines:
             "experts": analysis.get("required_experts", []),
             "responses": {},
             "started_at": time.time(),
+            "correlation_id": correlation_id,
         }
 
         # Dispatch to experts (note: in a real implementation, this would
@@ -664,6 +676,7 @@ Guidelines:
             "interaction_id": interaction_id,
             "expert_responses": expert_responses,
             "status": "completed" if expert_responses else "failed",
+            "correlation_id": correlation_id,
         }
 
     async def _get_expert_response(
@@ -844,6 +857,17 @@ Direct Answer:
                 max_tokens=1000 if is_verbose else 500,
             )
 
+            usage = getattr(response, "usage", None)
+            total_tokens = getattr(usage, "total_tokens", None) if usage else None
+            if total_tokens is not None:
+                try:
+                    metrics_registry.record_synthesis_tokens(self.name, int(total_tokens))
+                except (TypeError, ValueError):
+                    self.logger.debug(
+                        "Skipping token metric due to non-integer usage",
+                        extra={"token_value": total_tokens},
+                    )
+
             final_answer = response.choices[0].message.content
 
             self.logger.info(
@@ -894,7 +918,18 @@ Direct Answer:
             Tenant ID for multi-tenant isolation, by default "default".
         """
         try:
+            correlation_id = get_correlation_id()
+
             # Store as collaboration history
+            collaboration_metadata = {
+                "complexity": analysis.get("complexity"),
+                "final_answer": final_answer,
+                "expert_responses": list(expert_responses.keys()),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            if correlation_id:
+                collaboration_metadata["correlation_id"] = correlation_id
+
             self.memory.store_knowledge(
                 collection="collaboration_history",
                 tenant_id=tenant_id,
@@ -906,16 +941,19 @@ Direct Answer:
                     ),
                     "task_description": question,
                 },
-                metadata={
-                    "complexity": analysis.get("complexity"),
-                    "final_answer": final_answer,
-                    "expert_responses": list(expert_responses.keys()),
-                    "timestamp": datetime.utcnow().isoformat(),
-                },
+                metadata=collaboration_metadata,
             )
 
             # Store as problem-solution if we have a good answer
             if final_answer and len(final_answer) > 50:
+                solution_metadata = {
+                    "interaction_id": interaction_id,
+                    "experts": analysis.get("required_experts"),
+                    "complexity": analysis.get("complexity"),
+                }
+                if correlation_id:
+                    solution_metadata["correlation_id"] = correlation_id
+
                 self.memory.store_knowledge(
                     collection="problem_solutions",
                     tenant_id=tenant_id,
@@ -923,11 +961,7 @@ Direct Answer:
                         "problem": question,
                         "solution": final_answer,
                     },
-                    metadata={
-                        "interaction_id": interaction_id,
-                        "experts": analysis.get("required_experts"),
-                        "complexity": analysis.get("complexity"),
-                    },
+                    metadata=solution_metadata,
                 )
 
             self.logger.info(
@@ -966,22 +1000,54 @@ Direct Answer:
         AgentResponse
             Response with synthesized answer and metadata.
         """
-        try:
-            # Extract message content
-            message_content = self._extract_message_content(message)
-            question = message_content.get("text", "")
-            tenant_id = message_content.get("tenant_id", "default")
-            
-            # Check for verbose override in message
+        request_start = time.perf_counter()
+
+        message_content = self._extract_message_content(message)
+        question = message_content.get("text", "")
+        tenant_id = message_content.get("tenant_id", "default")
+
+        incoming_metadata: Dict[str, Any] = {}
+        if isinstance(message, Mapping):
+            raw_metadata = message.get("metadata", {})
+            if isinstance(raw_metadata, Mapping):
+                incoming_metadata = dict(raw_metadata)
+
+        candidate_ids: List[Any] = [
+            message_content.get("correlation_id"),
+            incoming_metadata.get("correlation_id"),
+        ]
+        if isinstance(message, Mapping):
+            candidate_ids.extend(
+                [
+                    message.get("correlation_id"),
+                    message.get("id"),
+                ]
+            )
+        candidate_ids.append(message_content.get("id"))
+
+        correlation_id: Optional[str] = None
+        for candidate in candidate_ids:
+            if candidate:
+                correlation_id = str(candidate)
+                break
+        if correlation_id is None:
+            correlation_id = f"coord-{uuid.uuid4().hex}"
+
+        with correlation_context(correlation_id):
             verbose_override = message_content.get("verbose")
             if verbose_override is None:
-                # Check metadata as fallback
-                verbose_override = message.get("metadata", {}).get("verbose")
+                verbose_override = incoming_metadata.get("verbose")
 
             if not question or not question.strip():
+                latency = time.perf_counter() - request_start
+                metrics_registry.record_request(self.name, "error", latency)
                 return AgentResponse(
                     content="Please provide a question for me to process.",
-                    metadata={"channel": self.name, "status": "no_input"},
+                    metadata={
+                        "channel": self.name,
+                        "status": "no_input",
+                        "correlation_id": correlation_id,
+                    },
                 )
 
             self.logger.info(
@@ -992,104 +1058,121 @@ Direct Answer:
                 },
             )
 
-            # Analyze question
-            analysis = self.analyze_question(question)
+            try:
+                analysis = self.analyze_question(question)
 
-            # Retrieve similar knowledge
-            similar_knowledge = await self.retrieve_similar_knowledge(
-                question, tenant_id
-            )
-
-            # Dispatch to experts
-            dispatch_result = await self.dispatch_to_experts(
-                question, analysis, similar_knowledge, tenant_id
-            )
-
-            if dispatch_result["status"] == "failed":
-                error_msg = (
-                    "Unable to get expert responses. Please try again."
+                similar_knowledge = await self.retrieve_similar_knowledge(
+                    question, tenant_id
                 )
-                self.logger.warning("Dispatch failed", extra={"status": "no_responses"})
+
+                dispatch_result = await self.dispatch_to_experts(
+                    question, analysis, similar_knowledge, tenant_id
+                )
+
+                if dispatch_result["status"] == "failed":
+                    latency = time.perf_counter() - request_start
+                    metrics_registry.record_request(self.name, "error", latency)
+                    error_msg = (
+                        "Unable to get expert responses. Please try again."
+                    )
+                    self.logger.warning(
+                        "Dispatch failed", extra={"status": "no_responses"}
+                    )
+                    return AgentResponse(
+                        content=error_msg,
+                        metadata={
+                            "channel": self.name,
+                            "status": "failed",
+                            "interaction_id": dispatch_result.get("interaction_id"),
+                            "correlation_id": dispatch_result.get(
+                                "correlation_id", correlation_id
+                            ),
+                        },
+                    )
+
+                final_answer = await self.synthesize_answer(
+                    question,
+                    analysis,
+                    dispatch_result["expert_responses"],
+                    tenant_id,
+                    verbose=verbose_override,
+                )
+
+                await self.store_collaboration(
+                    question,
+                    analysis,
+                    dispatch_result["expert_responses"],
+                    final_answer,
+                    dispatch_result["interaction_id"],
+                    tenant_id,
+                )
+
+                latency = time.perf_counter() - request_start
+                metrics_registry.record_request(self.name, "success", latency)
+
                 return AgentResponse(
-                    content=error_msg,
+                    content=final_answer,
                     metadata={
                         "channel": self.name,
-                        "status": "failed",
-                        "interaction_id": dispatch_result.get("interaction_id"),
+                        "interaction_id": dispatch_result["interaction_id"],
+                        "complexity": analysis.get("complexity"),
+                        "experts_involved": analysis.get("required_experts"),
+                        "knowledge_used": len(similar_knowledge) > 0,
+                        "correlation_id": dispatch_result.get("correlation_id", correlation_id),
                     },
                 )
 
-            # Synthesize answer
-            final_answer = await self.synthesize_answer(
-                question,
-                analysis,
-                dispatch_result["expert_responses"],
-                tenant_id,
-                verbose=verbose_override,
-            )
-
-            # Store collaboration
-            await self.store_collaboration(
-                question,
-                analysis,
-                dispatch_result["expert_responses"],
-                final_answer,
-                dispatch_result["interaction_id"],
-                tenant_id,
-            )
-
-            # Return response
-            self.logger.info(
-                "Message processing completed",
-                extra={
-                    "interaction_id": dispatch_result["interaction_id"],
-                    "answer_length": len(final_answer),
-                },
-            )
-
-            return AgentResponse(
-                content=final_answer,
-                metadata={
-                    "channel": self.name,
-                    "interaction_id": dispatch_result["interaction_id"],
-                    "complexity": analysis.get("complexity"),
-                    "experts_involved": analysis.get("required_experts"),
-                    "knowledge_used": len(similar_knowledge) > 0,
-                },
-            )
-
-        except Exception as e:
-            self.logger.exception(f"Error processing message: {e}")
-            return AgentResponse(
-                content=f"An error occurred while processing your question. {str(e)[:100]}",
-                metadata={"channel": self.name, "status": "error"},
-            )
+            except Exception as e:
+                self.logger.exception(f"Error processing message: {e}")
+                latency = time.perf_counter() - request_start
+                metrics_registry.record_request(self.name, "error", latency)
+                return AgentResponse(
+                    content=f"An error occurred while processing your question. {str(e)[:100]}",
+                    metadata={
+                        "channel": self.name,
+                        "status": "error",
+                        "correlation_id": correlation_id,
+                    },
+                )
 
     @staticmethod
     def _extract_message_content(message: Mapping[str, Any] | Any) -> Dict[str, Any]:
-        """Extract content from various message formats.
-
-        Parameters
-        ----------
-        message : Mapping[str, Any] | Any
-            Message in various possible formats.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Extracted content with "text" and optional "tenant_id".
-        """
+        """Extract content from various message formats."""
         if isinstance(message, Mapping):
-            # Try common content fields
+            tenant_id = message.get("tenant_id", "default")
+            message_id = message.get("id") or message.get("message_id")
+            message_correlation = message.get("correlation_id")
+            message_verbose = message.get("verbose")
+
             for key in ("content", "text", "message", "query", "question"):
                 if key in message and message[key]:
-                    text = message[key]
-                    if isinstance(text, Mapping) and "text" in text:
-                        text = text["text"]
-                    return {
-                        "text": str(text),
-                        "tenant_id": message.get("tenant_id", "default"),
+                    text_value = message[key]
+                    nested_correlation = None
+                    nested_verbose = None
+
+                    if isinstance(text_value, Mapping):
+                        nested_correlation = text_value.get("correlation_id")
+                        nested_verbose = text_value.get("verbose")
+                        if "text" in text_value and text_value["text"]:
+                            text_value = text_value["text"]
+
+                    result: Dict[str, Any] = {
+                        "text": str(text_value),
+                        "tenant_id": tenant_id,
                     }
+                    if message_id is not None:
+                        result["id"] = message_id
+                    if message_verbose is not None:
+                        result["verbose"] = message_verbose
+                    elif nested_verbose is not None:
+                        result["verbose"] = nested_verbose
+                    if message_correlation is not None:
+                        result["correlation_id"] = message_correlation
+                    elif nested_correlation is not None:
+                        result["correlation_id"] = nested_correlation
+
+                    return result
+
         return {
             "text": str(message),
             "tenant_id": "default",

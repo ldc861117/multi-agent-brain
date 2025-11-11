@@ -39,6 +39,12 @@ _ISOLATED_ENV_KEYS: Iterable[str] = (
     "OPENAI_MAX_RETRY_DELAY",
     "MILVUS_URI",
     "LOG_LEVEL",
+    "LOG_FORMAT",
+    "LOG_DIAGNOSE",
+    "ENABLE_METRICS",
+    "METRICS_PORT",
+    "METRICS_HOST",
+    "RUN_ID",
     "DEBUG",
 )
 

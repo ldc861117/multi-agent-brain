@@ -11,6 +11,7 @@
 - ✅ **Coordination pipeline implemented** — [CoordinationAgent](agents/coordination/agent.py) analyses incoming questions, retrieves Milvus-backed knowledge, dispatches experts, and persists collaboration traces. The flow is exercised end-to-end in [examples/coordination_agent_example.py](examples/coordination_agent_example.py) and the offline harness at [scripts/verify_multi_expert_dispatch.py](scripts/verify_multi_expert_dispatch.py).
 - ✅ **Provider-agnostic configuration** — `ConfigManager` separates chat and embedding providers with per-agent overrides. Behaviour and precedence are covered by [utils/test_env_config.py](utils/test_env_config.py) and [tests/unit/test_openai_client.py](tests/unit/test_openai_client.py).
 - ✅ **Shared memory with caching & metrics** — [SharedMemory](agents/shared_memory.py) integrates with Milvus, exposes an embedding cache, and tracks usage statistics. Coverage lives in [tests/unit/test_shared_memory.py](tests/unit/test_shared_memory.py) and [tests/unit/test_shared_memory_minimal.py](tests/unit/test_shared_memory_minimal.py).
+- ✅ **Observability baseline** — Structured logging with correlation IDs plus an opt-in `/metrics` JSON endpoint is provided by [utils/observability.py](utils/observability.py) and exercised in [tests/unit/test_observability.py](tests/unit/test_observability.py). Details live in the [Observability baseline milestone](docs/ROADMAP.md#h2--uiux-enablement-operator-visibility--interaction).
 - 📚 **Documentation-first workflow** — Comprehensive guides reside in [docs/README.md](docs/README.md), with agent specifics in [AGENTS.md](AGENTS.md) and testing practices in [docs/testing/README.md](docs/testing/README.md).
 
 **Limitations**
@@ -65,6 +66,16 @@ All agents inherit from `BaseAgent` and use `AgentResponse`. See [AGENTS.md](AGE
 | Validation tooling | CLI | `python -m utils.config_validator --path config.yaml --default config.default.yaml` | Validates and optionally repairs YAML against the template. |
 
 Reference [.env.example](.env.example) for annotated samples and consult [docs/configuration/guide.md](docs/configuration/guide.md) for precedence details.
+
+## Observability Toolkit
+
+Structured logging and metrics instrumentation are built in:
+
+- **Log formats** — Control sinks via `LOG_FORMAT` (`text`, `json`, or `both`). Every record includes `timestamp`, `level`, `agent`, `run_id`, `correlation_id`, `message`, and `module`, making it easy to trace a request end-to-end.
+- **Correlation IDs** — The coordination pipeline assigns (or propagates) a correlation ID per message and threads it through analysis, retrieval, dispatch, synthesis, and persistence. Responses surface the identifier in their metadata for downstream consumers.
+- **Metrics endpoint** — Enable `ENABLE_METRICS=true` (and optionally adjust `METRICS_PORT`) to expose a dependency-free `/metrics` JSON endpoint reporting request totals, latency p50/p95, success/error counts, retrieval hits, and synthesis token usage.
+
+See the [Observability baseline milestone](docs/ROADMAP.md#h2--uiux-enablement-operator-visibility--interaction) for roadmap context and next steps.
 
 ## Setup & Usage Modes
 

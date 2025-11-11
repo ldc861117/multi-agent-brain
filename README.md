@@ -19,6 +19,10 @@
 - Interactive runs require valid LLM credentials; unit tests stub network calls, but launching the network will target the configured providers.
 - Persistent memory assumes an accessible Milvus endpoint. Without it, development falls back to local stubs and some features remain inert.
 
+## Roadmap
+
+The phased roadmap covering foundational hardening, UI/UX enablement, and productization lives in [docs/ROADMAP.md](docs/ROADMAP.md). Each horizon lists milestones with acceptance slices, dependencies, and success metrics to guide future tickets.
+
 ## Architecture Overview
 
 The network is defined in [config.yaml](config.yaml) as an OpenAgents deployment exposing HTTP (8700) and gRPC (8600) transports. Messages enter through the public `general` channel, escalate to the `CoordinationAgent`, and fan out to domain specialists. Shared context is stored in Milvus via `SharedMemory`, while `OpenAIClientWrapper` mediates chat and embedding providers resolved by `ConfigManager`.

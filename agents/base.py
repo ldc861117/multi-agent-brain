@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import functools
+import inspect
 from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Optional, Protocol, Sequence, Union, runtime_checkable
 
@@ -115,6 +117,19 @@ class BaseAgent(BaseAgentProtocol):
                 else "agent"
             )
 
+        handler = cls.__dict__.get("handle_message")
+        if handler is not None and not inspect.iscoroutinefunction(handler):
+            @functools.wraps(handler)
+            async def _async_handle(
+                self,
+                message: AgentMessage,
+                conversation_state: ConversationState = None,
+            ) -> AgentResponse:
+                result = handler(self, message, conversation_state)
+                return self._coerce_agent_response(result)
+
+            setattr(cls, "handle_message", _async_handle)
+
     async def plan(
         self,
         message: AgentMessage,
@@ -133,7 +148,8 @@ class BaseAgent(BaseAgentProtocol):
     ) -> AgentResponse:
         """Delegate to :meth:`handle_message` for backwards compatibility."""
 
-        return await self.handle_message(message, conversation_state=conversation_state)
+        result = await self.handle_message(message, conversation_state=conversation_state)
+        return self._coerce_agent_response(result)
 
     async def reflect(
         self,
@@ -168,6 +184,27 @@ class BaseAgent(BaseAgentProtocol):
         """Fallback to an empty toolset."""
 
         return ()
+
+    def _coerce_agent_response(self, payload: Any) -> AgentResponse:
+        if isinstance(payload, AgentResponse):
+            return payload
+        if isinstance(payload, tuple) and len(payload) == 2:
+            content, metadata = payload
+            if not isinstance(metadata, Mapping):
+                metadata = {"value": metadata}
+            return AgentResponse(content=str(content), metadata=dict(metadata))
+        if isinstance(payload, Mapping):
+            content = payload.get("content")
+            metadata = payload.get("metadata", {})
+            if content is None:
+                remaining = {k: v for k, v in payload.items() if k != "metadata"}
+                content = remaining or ""
+            if not isinstance(metadata, Mapping):
+                metadata = {"value": metadata}
+            return AgentResponse(content=str(content), metadata=dict(metadata))
+        if payload is None:
+            return AgentResponse(content="", metadata={})
+        return AgentResponse(content=str(payload), metadata={})
 
     async def handle_message(
         self,

@@ -150,6 +150,50 @@ api_config:
       embedding_dimension: 768
       answer_verbose: false
 
+registry:
+  bootstrap:
+    coordination:
+      entrypoint: agents.coordination:CoordinationAgent
+      layer: coordination
+      expert_kind: coordination
+      aliases:
+        - router
+        - orchestrator
+      metadata:
+        channel: coordination
+    python_expert:
+      entrypoint: agents.python_expert:PythonExpertAgent
+      layer: expert
+      expert_kind: python_expert
+      aliases:
+        - python
+      metadata:
+        channel: python_expert
+    milvus_expert:
+      entrypoint: agents.milvus_expert:MilvusExpertAgent
+      layer: expert
+      expert_kind: milvus_expert
+      aliases:
+        - milvus
+      metadata:
+        channel: milvus_expert
+    devops_expert:
+      entrypoint: agents.devops_expert:DevOpsExpertAgent
+      layer: expert
+      expert_kind: devops_expert
+      aliases:
+        - devops
+      metadata:
+        channel: devops_expert
+    general:
+      entrypoint: agents.general:GeneralAgent
+      layer: entry
+      expert_kind: general
+      aliases:
+        - lobby
+      metadata:
+        channel: general
+
 prompts:
   base_path: "./prompts"
   coordination: null

@@ -431,6 +431,133 @@ class ConfigManager:
         # Return verbose setting if specified, default to False (concise)
         return agent_override.get('answer_verbose', False)
     
+    def get_registry_bootstrap(self) -> Dict[str, Dict[str, Any]]:
+        """Return registry bootstrap definitions from configuration.
+        
+        The registry bootstrap is composed from multiple sources to maintain
+        backward compatibility with legacy configurations:
+        
+        1. ``channels`` definitions provide entrypoints and descriptions.
+        2. ``api_config.agent_overrides`` ensures known agents are registered
+           even when explicit registry metadata is omitted.
+        3. ``registry.bootstrap`` (mapping or list) can override and extend
+           the automatically derived entries.
+        
+        Returns
+        -------
+        Dict[str, Dict[str, Any]]
+            Normalised mapping keyed by canonical agent name.
+        """
+        yaml_config = self._load_yaml_config()
+        definitions: Dict[str, Dict[str, Any]] = {}
+        
+        # Seed from channel definitions when available.
+        channels = yaml_config.get('channels', {})
+        if isinstance(channels, dict):
+            for channel_name, channel_config in channels.items():
+                if not isinstance(channel_config, dict):
+                    continue
+                canonical_name = str(channel_name).strip()
+                if not canonical_name:
+                    continue
+                entry = definitions.setdefault(canonical_name, {})
+                entry.setdefault('name', canonical_name)
+                entrypoint = channel_config.get('entrypoint')
+                if entrypoint:
+                    entry.setdefault('entrypoint', entrypoint)
+                description = channel_config.get('description')
+                if description:
+                    entry.setdefault('description', description)
+                visibility = channel_config.get('visibility')
+                targets = channel_config.get('targets')
+                metadata = entry.setdefault('metadata', {})
+                if isinstance(metadata, dict):
+                    if visibility and 'visibility' not in metadata:
+                        metadata['visibility'] = visibility
+                    if targets and 'targets' not in metadata:
+                        metadata['targets'] = list(targets)
+        
+        # Ensure agents listed in overrides exist in the mapping.
+        api_config = yaml_config.get('api_config', {})
+        overrides = api_config.get('agent_overrides', {})
+        if isinstance(overrides, dict):
+            for agent_name in overrides.keys():
+                canonical_name = str(agent_name).strip()
+                if not canonical_name:
+                    continue
+                entry = definitions.setdefault(canonical_name, {})
+                entry.setdefault('name', canonical_name)
+                # Record the override fragment for downstream consumers.
+                override_payload = overrides.get(agent_name)
+                if isinstance(override_payload, dict):
+                    entry.setdefault('override', dict(override_payload))
+        
+        # Explicit registry bootstrap entries override previous data.
+        registry_config = yaml_config.get('registry', {})
+        bootstrap_config = None
+        if isinstance(registry_config, dict):
+            bootstrap_config = registry_config.get('bootstrap')
+        
+        def _merge_entry(name: str, payload: Dict[str, Any]) -> None:
+            canonical_name = str(name).strip()
+            if not canonical_name:
+                return
+            existing = definitions.setdefault(canonical_name, {})
+            existing['name'] = canonical_name
+            for key, value in payload.items():
+                if value is None:
+                    continue
+                if key == 'aliases':
+                    incoming = [str(item).strip() for item in value if str(item).strip()]
+                    current = existing.get('aliases', [])
+                    if not isinstance(current, list):
+                        current = list(current) if current else []
+                    merged = list(dict.fromkeys([*current, *incoming]))
+                    existing['aliases'] = merged
+                elif key == 'metadata' and isinstance(value, dict):
+                    current_meta = existing.get('metadata', {})
+                    if not isinstance(current_meta, dict):
+                        current_meta = {}
+                    merged_meta = {**current_meta, **value}
+                    existing['metadata'] = merged_meta
+                else:
+                    existing[key] = value
+        
+        if isinstance(bootstrap_config, dict):
+            for name, payload in bootstrap_config.items():
+                if isinstance(payload, dict):
+                    _merge_entry(name, dict(payload))
+                else:
+                    logger.warning(
+                        "Ignoring registry.bootstrap entry with unsupported payload",
+                        extra={"entry": name, "type": type(payload).__name__},
+                    )
+        elif isinstance(bootstrap_config, list):
+            for item in bootstrap_config:
+                if not isinstance(item, dict):
+                    logger.warning(
+                        "Ignoring non-mapping registry.bootstrap item",
+                        extra={"type": type(item).__name__},
+                    )
+                    continue
+                name = item.get('name')
+                if not name:
+                    logger.warning(
+                        "Registry bootstrap item missing 'name' field; skipping",
+                        extra={"item": item},
+                    )
+                    continue
+                payload = dict(item)
+                payload.pop('name', None)
+                _merge_entry(str(name), payload)
+        elif bootstrap_config is not None:
+            logger.warning(
+                "registry.bootstrap must be a mapping or list of mappings",
+                extra={"provided_type": type(bootstrap_config).__name__},
+            )
+        
+        return definitions
+    
     def reload_config(self):
         """Reload configuration from file and clear cache."""
         self._yaml_config = None
@@ -486,6 +613,11 @@ def get_agent_answer_verbose(agent_name: str) -> bool:
         True if verbose answers are enabled, False for concise.
     """
     return get_config_manager().get_agent_answer_verbose(agent_name)
+
+
+def get_registry_bootstrap() -> Dict[str, Dict[str, Any]]:
+    """Return registry bootstrap definitions using the global manager."""
+    return get_config_manager().get_registry_bootstrap()
 
 
 def reload_config():

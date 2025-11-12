@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Mapping, MutableMapping, Optional
 from loguru import logger
 
 from agents.base import AgentResponse, BaseAgent
+from agents.registry import ExpertRegistration, get_expert_registry
 from agents.shared_memory import SharedMemory
 from agents.types import AgentCapabilities, CapabilityDescriptor, ExpertKind, Layer
 from utils import (
@@ -159,6 +160,16 @@ class CoordinationAgent(BaseAgent):
         
         self.memory = SharedMemory(agent_name=self.name)
         self.logger = logger.bind(agent="coordination")
+
+        self.registry: Optional[ExpertRegistry]
+        try:
+            self.registry = get_expert_registry()
+        except Exception as exc:  # pragma: no cover - defensive safeguard
+            self.logger.warning(
+                "Expert registry unavailable; using legacy dispatch heuristics",
+                extra={"error": str(exc)},
+            )
+            self.registry = None
 
         # Mapping of expert types to channel names
         self.expert_channels = {
@@ -639,6 +650,32 @@ Guidelines:
             },
         )
 
+        requested_experts = list(dict.fromkeys(analysis.get("required_experts", [])))
+        analysis["required_experts"] = requested_experts
+
+        registry_entries: Dict[str, ExpertRegistration] = {}
+        skipped_registry_experts: List[str] = []
+
+        if self.registry is not None:
+            filtered_experts: List[str] = []
+            for label in requested_experts:
+                entry = self.registry.get(label)
+                if entry is None:
+                    filtered_experts.append(label)
+                    continue
+                if not entry.enabled:
+                    skipped_registry_experts.append(entry.name)
+                    self.logger.info(
+                        "Expert disabled in registry; skipping dispatch",
+                        extra={"requested_label": label, "registry_name": entry.name},
+                    )
+                    continue
+                registry_entries[label] = entry
+                filtered_experts.append(label)
+            if filtered_experts != requested_experts:
+                analysis["required_experts"] = filtered_experts
+                requested_experts = filtered_experts
+        
         # Build context from similar knowledge
         context = ""
         if similar_knowledge:
@@ -661,6 +698,12 @@ Guidelines:
         }
 
         # Record collaboration state
+        registry_snapshot: Dict[str, Dict[str, Any]] = {}
+        if registry_entries:
+            registry_snapshot = {
+                label: entry.to_dict() for label, entry in registry_entries.items()
+            }
+
         self.active_collaborations[interaction_id] = {
             "status": "in_progress",
             "experts": analysis.get("required_experts", []),
@@ -668,6 +711,12 @@ Guidelines:
             "started_at": time.time(),
             "correlation_id": correlation_id,
         }
+        if registry_snapshot:
+            self.active_collaborations[interaction_id]["registry_entries"] = registry_snapshot
+        if skipped_registry_experts:
+            self.active_collaborations[interaction_id]["skipped_registry_experts"] = list(
+                skipped_registry_experts
+            )
 
         # Dispatch to experts (note: in a real implementation, this would
         # send messages to expert channels through OpenAgents' message system)
@@ -705,6 +754,8 @@ Guidelines:
             "expert_responses": expert_responses,
             "status": "completed" if expert_responses else "failed",
             "correlation_id": correlation_id,
+            "registry_entries": registry_snapshot,
+            "skipped_registry_experts": list(skipped_registry_experts),
         }
 
     async def _get_expert_response(

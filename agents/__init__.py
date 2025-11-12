@@ -15,6 +15,13 @@ from .devops_expert import DevOpsExpertAgent
 from .general import GeneralAgent
 from .milvus_expert import MilvusExpertAgent
 from .python_expert import PythonExpertAgent
+from .registry import (
+    ExpertRegistry,
+    ExpertRegistration,
+    bootstrap_registry,
+    expert_registry,
+    get_expert_registry,
+)
 from .types import (
     AgentCapabilities,
     CapabilityDescriptor,
@@ -34,6 +41,8 @@ __all__ = [
     "CoordinationAgent",
     "DevOpsExpertAgent",
     "ExpertKind",
+    "ExpertRegistry",
+    "ExpertRegistration",
     "GeneralAgent",
     "Layer",
     "MilvusExpertAgent",
@@ -42,4 +51,7 @@ __all__ = [
     "ReflectionResult",
     "RouteDecision",
     "ToolDescriptor",
+    "bootstrap_registry",
+    "expert_registry",
+    "get_expert_registry",
 ]

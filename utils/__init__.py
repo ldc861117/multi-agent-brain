@@ -1,6 +1,6 @@
 # This file makes the utils directory a package.
 
-from .config_manager import get_agent_config, get_config_manager, reload_config, get_agent_answer_verbose
+from .config_manager import get_agent_config, get_config_manager, get_registry_bootstrap, reload_config, get_agent_answer_verbose
 from .config_validator import ConfigValidator, ConfigValidationError
 from .observability import (
     RUN_ID,
@@ -31,6 +31,7 @@ __all__ = [
     # Config manager exports
     'get_agent_config',
     'get_config_manager', 
+    'get_registry_bootstrap',
     'reload_config',
     'get_agent_answer_verbose',
 

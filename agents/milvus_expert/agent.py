@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping, MutableMapping, Optional
 
 from agents.base import AgentResponse, BaseAgent
+from agents.types import AgentCapabilities, CapabilityDescriptor, ExpertKind, Layer
 
 
 class MilvusExpertAgent(BaseAgent):
@@ -12,6 +13,19 @@ class MilvusExpertAgent(BaseAgent):
 
     name = "milvus_expert"
     description = "Helps with Milvus vector database operations and tuning."
+    role = "specialist"
+    layer = Layer.EXPERT
+    expert_kind = ExpertKind.MILVUS_EXPERT
+    capabilities = AgentCapabilities(
+        primary=(
+            CapabilityDescriptor(
+                name="milvus_guidance",
+                description="Supports Milvus vector database architecture and tuning questions.",
+                outputs=("recommendations",),
+                tags=("milvus", "vector-db"),
+            ),
+        ),
+    )
 
     async def handle_message(
         self,

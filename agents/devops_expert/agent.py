@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping, MutableMapping, Optional
 
 from agents.base import AgentResponse, BaseAgent
+from agents.types import AgentCapabilities, CapabilityDescriptor, ExpertKind, Layer
 
 
 class DevOpsExpertAgent(BaseAgent):
@@ -13,6 +14,19 @@ class DevOpsExpertAgent(BaseAgent):
     name = "devops_expert"
     description = (
         "Lends support for infrastructure automation, observability, and releases."
+    )
+    role = "specialist"
+    layer = Layer.EXPERT
+    expert_kind = ExpertKind.DEVOPS_EXPERT
+    capabilities = AgentCapabilities(
+        primary=(
+            CapabilityDescriptor(
+                name="devops_guidance",
+                description="Helps with CI/CD, infrastructure automation, and operations.",
+                outputs=("recommendations",),
+                tags=("devops", "infrastructure"),
+            ),
+        ),
     )
 
     async def handle_message(

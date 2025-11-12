@@ -19,6 +19,7 @@ from loguru import logger
 
 from agents.base import AgentResponse, BaseAgent
 from agents.shared_memory import SharedMemory
+from agents.types import AgentCapabilities, CapabilityDescriptor, ExpertKind, Layer
 from utils import (
     OpenAIClientWrapper,
     correlation_context,
@@ -44,6 +45,33 @@ class CoordinationAgent(BaseAgent):
     description = (
         "Routes work between specialist agents, maintains context, and orchestrates"
         " multi-agent collaboration."
+    )
+    role = "orchestrator"
+    layer = Layer.COORDINATION
+    expert_kind = ExpertKind.COORDINATION
+    capabilities = AgentCapabilities(
+        primary=(
+            CapabilityDescriptor(
+                name="task_analysis",
+                description="Analyzes incoming requests to determine required expertise.",
+                outputs=("analysis",),
+                tags=("coordination", "analysis"),
+            ),
+            CapabilityDescriptor(
+                name="expert_dispatch",
+                description="Coordinates specialists and aggregates their responses.",
+                outputs=("dispatch_plan",),
+                tags=("coordination", "routing"),
+            ),
+        ),
+        auxiliary=(
+            CapabilityDescriptor(
+                name="response_synthesis",
+                description="Synthesizes expert contributions into cohesive replies.",
+                outputs=("final_answer",),
+                tags=("coordination", "synthesis"),
+            ),
+        ),
     )
 
     SUPPORTED_EXPERTS = {"python", "milvus", "devops"}

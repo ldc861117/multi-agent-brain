@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Mapping, MutableMapping, Optional
 
 from agents.base import AgentResponse, BaseAgent
+from agents.types import AgentCapabilities, CapabilityDescriptor, ExpertKind, Layer
 
 
 class GeneralAgent(BaseAgent):
@@ -16,6 +17,19 @@ class GeneralAgent(BaseAgent):
 
     name = "general"
     description = "Handles open-ended user messages across the network."
+    role = "entrypoint"
+    layer = Layer.ENTRY
+    expert_kind = ExpertKind.GENERAL
+    capabilities = AgentCapabilities(
+        primary=(
+            CapabilityDescriptor(
+                name="general_greeting",
+                description="Provides onboarding responses for new conversations.",
+                outputs=("response",),
+                tags=("general", "greeting"),
+            ),
+        ),
+    )
 
     async def handle_message(
         self,

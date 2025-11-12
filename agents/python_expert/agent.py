@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping, MutableMapping, Optional
 
 from agents.base import AgentResponse, BaseAgent
+from agents.types import AgentCapabilities, CapabilityDescriptor, ExpertKind, Layer
 
 
 class PythonExpertAgent(BaseAgent):
@@ -13,6 +14,19 @@ class PythonExpertAgent(BaseAgent):
     name = "python_expert"
     description = (
         "Responds to Python development questions and eventually executes snippets."
+    )
+    role = "specialist"
+    layer = Layer.EXPERT
+    expert_kind = ExpertKind.PYTHON_EXPERT
+    capabilities = AgentCapabilities(
+        primary=(
+            CapabilityDescriptor(
+                name="python_guidance",
+                description="Offers guidance for Python development and debugging.",
+                outputs=("recommendations",),
+                tags=("python", "expert"),
+            ),
+        ),
     )
 
     async def handle_message(

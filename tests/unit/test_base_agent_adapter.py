@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agents.base import AgentResponse, BaseAgent
+from agents.types import ExpertKind, Layer
 
 
 @pytest.mark.asyncio
@@ -66,3 +67,47 @@ async def test_none_payload_defaults_to_empty_response() -> None:
     response = await agent.handle_message("unused")
     assert response.content == ""
     assert response.metadata == {}
+
+
+@pytest.mark.asyncio
+async def test_role_defaults_follow_expert_kind_and_layer_coercion() -> None:
+    class DevOpsAgent(BaseAgent):
+        name = "devops_agent"
+        expert_kind = ExpertKind.DEVOPS_EXPERT
+        layer = "expert"
+        role = ""
+
+        async def handle_message(self, message, conversation_state=None):
+            return AgentResponse("ok", {"message": "seen"})
+
+    agent = DevOpsAgent()
+
+    assert agent.role == "devops_expert"
+    assert agent.layer is Layer.EXPERT
+
+    route_payload = await agent.route({"question": "status?"})
+    assert route_payload["layer"] == Layer.EXPERT.value
+    assert route_payload["expert_kind"] == ExpertKind.DEVOPS_EXPERT.value
+
+
+@pytest.mark.asyncio
+async def test_coerce_agent_response_handles_edge_cases() -> None:
+    class CoercionAgent(BaseAgent):
+        name = "coercion_agent"
+
+        async def handle_message(self, message, conversation_state=None):
+            return AgentResponse("ok", {})
+
+    agent = CoercionAgent()
+
+    tuple_response = agent._coerce_agent_response(("tuple", 42))
+    assert tuple_response.content == "tuple"
+    assert tuple_response.metadata == {"value": 42}
+
+    mapping_response = agent._coerce_agent_response({"metadata": 7, "other": "data"})
+    assert mapping_response.content == "{'other': 'data'}"
+    assert mapping_response.metadata == {"value": 7}
+
+    scalar_response = agent._coerce_agent_response(123)
+    assert scalar_response.content == "123"
+    assert scalar_response.metadata == {}

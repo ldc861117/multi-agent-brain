@@ -4,7 +4,8 @@
 import pytest
 import sys
 import os
-from unittest.mock import Mock, patch, MagicMock
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 # Mock the dependencies that might not be available
 class MockMilvusException(Exception):
@@ -34,41 +35,112 @@ class MockNumpy:
 
 sys.modules['numpy'] = MockNumpy()
 
+os.environ.setdefault("TEST_DISABLE_MILVUS", "1")
+
 # Now import the module
-from agents.shared_memory import SharedMemory, MemoryMetrics
+from agents.shared_memory import SharedMemory, MemoryMetrics, MilvusException as SharedMilvusException
 
 
 class TestSharedMemory:
     """Test cases for SharedMemory class."""
     
     @patch('agents.shared_memory.connections.connect')
-    @patch('agents.shared_memory.utility.has_collection')
     @patch('agents.shared_memory.SharedMemory._initialize_collections')
-    def test_shared_memory_init(self, mock_init, mock_has_collection, mock_connect):
-        """Test SharedMemory initialization."""
-        mock_has_collection.return_value = False
-        
-        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
+    def test_shared_memory_init(self, mock_init, mock_connect):
+        """SharedMemory falls back to in-memory backend when Milvus is disabled."""
+        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(
+            os.environ,
+            {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "1"},
+            clear=False,
+        ):
             memory = SharedMemory()
-            
-            assert memory is not None
-            assert isinstance(memory.metrics, MemoryMetrics)
-            assert hasattr(memory, 'milvus_uri')
-            mock_init.assert_called_once()
+
+        assert memory is not None
+        assert memory._milvus_disabled is True
+        assert memory._in_memory_store is not None
+        assert isinstance(memory.metrics, MemoryMetrics)
+        assert hasattr(memory, 'milvus_uri')
+        mock_connect.assert_not_called()
+        mock_init.assert_not_called()
     
     @patch('agents.shared_memory.connections.connect')
-    @patch('agents.shared_memory.utility.has_collection')
     @patch('agents.shared_memory.SharedMemory._initialize_collections')
-    def test_shared_memory_init_with_agent_name(self, mock_init, mock_has_collection, mock_connect):
-        """Test SharedMemory initialization with agent name."""
-        mock_has_collection.return_value = False
-        
-        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
+    def test_shared_memory_init_with_agent_name(self, mock_init, mock_connect):
+        """Agent-specific initialization should also use the in-memory backend."""
+        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(
+            os.environ,
+            {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "1"},
+            clear=False,
+        ):
             memory = SharedMemory(agent_name="coordination")
-            
-            assert memory is not None
-            assert hasattr(memory, 'milvus_uri')
-            mock_init.assert_called_once()
+
+        assert memory is not None
+        assert memory._milvus_disabled is True
+        assert memory._in_memory_store is not None
+        assert hasattr(memory, 'milvus_uri')
+        mock_connect.assert_not_called()
+        mock_init.assert_not_called()
+
+    def test_in_memory_store_and_search(self):
+        """store_knowledge and search_knowledge operate with the in-memory backend."""
+        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(
+            os.environ,
+            {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "1"},
+            clear=False,
+        ):
+            memory = SharedMemory()
+
+        record_id = memory.store_knowledge(
+            memory.COLLECTION_PROBLEM_SOLUTIONS,
+            tenant_id="tenant-42",
+            content={
+                "problem": "Milvus setup guidance",
+                "solution": "Enable the TEST_DISABLE_MILVUS flag for tests.",
+            },
+        )
+
+        assert record_id > 0
+        assert memory.metrics.storage_operations == 1
+
+        results = memory.search_knowledge(
+            memory.COLLECTION_PROBLEM_SOLUTIONS,
+            tenant_id="tenant-42",
+            query="Milvus",
+            top_k=3,
+            threshold=0.3,
+        )
+
+        assert results
+        assert results[0]["problem"] == "Milvus setup guidance"
+        assert results[0]["solution"].startswith("Enable the TEST_DISABLE_MILVUS")
+
+        stats_before = memory.get_collection_stats(memory.COLLECTION_PROBLEM_SOLUTIONS)
+        assert stats_before["total_records"] == 1
+        assert stats_before["tenant_records"] == 1
+
+        health_before = memory.health_check()
+        assert health_before.get("mode") == "in_memory"
+        assert health_before["collections"][memory.COLLECTION_PROBLEM_SOLUTIONS]["record_count"] == 1
+
+        deleted = memory.delete_by_tenant(memory.COLLECTION_PROBLEM_SOLUTIONS, "tenant-42")
+        assert deleted == 1
+
+        stats_after = memory.get_collection_stats(memory.COLLECTION_PROBLEM_SOLUTIONS)
+        assert stats_after["total_records"] == 0
+        assert stats_after["tenant_records"] == 0
+
+        results_after_delete = memory.search_knowledge(
+            memory.COLLECTION_PROBLEM_SOLUTIONS,
+            tenant_id="tenant-42",
+            query="Milvus",
+            top_k=3,
+            threshold=0.3,
+        )
+        assert results_after_delete == []
+
+        health_after = memory.health_check()
+        assert health_after.get("mode") == "in_memory"
+        assert health_after["collections"][memory.COLLECTION_PROBLEM_SOLUTIONS]["record_count"] == 0
     
     def test_memory_metrics_initialization(self):
         """Test MemoryMetrics initialization."""
@@ -100,39 +172,73 @@ class TestSharedMemory:
 class TestSharedMemoryConfig:
     """Test SharedMemory configuration loading."""
     
-    @patch('agents.shared_memory.connections.connect')
-    @patch('agents.shared_memory.utility.has_collection')
-    @patch('agents.shared_memory.SharedMemory._initialize_collections')
-    def test_shared_memory_uses_agent_config(self, mock_init, mock_has_collection, mock_connect):
-        """Test that SharedMemory can use agent-specific configuration."""
-        mock_has_collection.return_value = False
-        
-        with patch('agents.shared_memory.get_openai_client') as mock_client, patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
-            # Test with agent name
-            memory = SharedMemory(agent_name="coordination")
-            assert memory is not None
-            
-            # Test without agent name
-            memory_default = SharedMemory()
-            assert memory_default is not None
-    
-    @patch('agents.shared_memory.get_openai_client')
     @patch('agents.shared_memory.get_config_manager')
-    @patch('agents.shared_memory.connections.connect')
-    @patch('agents.shared_memory.utility.has_collection')
+    @patch('agents.shared_memory.get_openai_client')
+    def test_shared_memory_uses_agent_config(self, mock_get_openai_client, mock_get_config_manager):
+        """Configuration manager values populate embedding metadata for each mode."""
+        manager = Mock()
+        manager.get_global_config.return_value = SimpleNamespace(
+            embedding_api=SimpleNamespace(model='global-model', dimension=128)
+        )
+        manager.get_agent_config.return_value = SimpleNamespace(
+            embedding_api=SimpleNamespace(model='agent-model', dimension=256)
+        )
+        mock_get_config_manager.return_value = manager
+        mock_get_openai_client.return_value = Mock()
+
+        with patch('agents.shared_memory.OpenAIClientWrapper') as mock_wrapper, patch.dict(
+            os.environ,
+            {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "1"},
+            clear=False,
+        ):
+            mock_wrapper.return_value = Mock()
+            memory_agent = SharedMemory(agent_name="coordination")
+            memory_default = SharedMemory()
+
+        manager.get_agent_config.assert_called_with("coordination")
+        manager.get_global_config.assert_called()
+        assert memory_agent.embedding_model == "agent-model"
+        assert memory_agent.embedding_dimension == 256
+        assert memory_default.embedding_model == "global-model"
+        assert memory_default.embedding_dimension == 128
+    
     @patch('agents.shared_memory.SharedMemory._initialize_collections')
-    def test_config_manager_integration(self, mock_init, mock_has_collection, mock_connect, mock_get_config, mock_get_openai_client):
-        """Test ConfigManager integration."""
-        mock_config = Mock()
-        mock_config._load_yaml_config.return_value = {
-            'api_config': {'agent_overrides': {}}
-        }
-        mock_get_config.return_value = mock_config
-        mock_has_collection.return_value = False
-        
-        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
+    @patch('agents.shared_memory.utility.has_collection', return_value=True)
+    @patch('agents.shared_memory.connections.connect')
+    @patch('agents.shared_memory.get_config_manager')
+    @patch('agents.shared_memory.get_openai_client')
+    def test_config_manager_integration(
+        self,
+        mock_get_openai_client,
+        mock_get_config_manager,
+        mock_connect,
+        mock_has_collection,
+        mock_init,
+    ):
+        """When Milvus is enabled, connections and initialization are invoked."""
+        manager = Mock()
+        manager.get_global_config.return_value = SimpleNamespace(
+            embedding_api=SimpleNamespace(model='global-milvus', dimension=384)
+        )
+        manager.get_agent_config.return_value = SimpleNamespace(
+            embedding_api=SimpleNamespace(model='agent-milvus', dimension=256)
+        )
+        mock_get_config_manager.return_value = manager
+        mock_get_openai_client.return_value = Mock()
+
+        with patch('agents.shared_memory.OpenAIClientWrapper') as mock_wrapper, patch.dict(
+            os.environ,
+            {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "0"},
+            clear=False,
+        ):
+            mock_wrapper.return_value = Mock()
             memory = SharedMemory()
+
+        mock_connect.assert_called_once()
+        mock_init.assert_called_once()
         assert memory is not None
+        assert memory._milvus_disabled is False
+        assert manager.get_global_config.called
 
 
 class TestSharedMemoryErrorHandling:
@@ -144,7 +250,7 @@ class TestSharedMemoryErrorHandling:
         """Test handling of connection errors."""
         mock_connect.side_effect = Exception("Connection failed")
         
-        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
+        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "0"}, clear=False):
             with pytest.raises(Exception):
                 SharedMemory()
     
@@ -155,8 +261,8 @@ class TestSharedMemoryErrorHandling:
         """Test handling of collection errors."""
         mock_has_collection.side_effect = MockMilvusException("Collection error")
         
-        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key"}, clear=False):
-            with pytest.raises(MockMilvusException):
+        with patch.dict(os.environ, {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "0"}, clear=False):
+            with pytest.raises(SharedMilvusException):
                 SharedMemory()
 
 

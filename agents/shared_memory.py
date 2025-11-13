@@ -21,7 +21,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 import numpy as np
 from loguru import logger
@@ -37,6 +37,41 @@ from pymilvus import (
 
 from utils.openai_client import get_openai_client, OpenAIClientWrapper
 from utils.config_manager import get_config_manager
+
+
+def _is_truthy_env(value: Optional[str]) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+class _InMemoryVectorStore:
+    """Minimal in-memory fallback when Milvus is unavailable."""
+
+    def __init__(self, collection_names: List[str]):
+        self._collections: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
+            name: {} for name in collection_names
+        }
+        self._next_id = 1
+
+    def store(self, collection: str, tenant_id: str, payload: Dict[str, Any]) -> int:
+        tenant_bucket = self._collections.setdefault(collection, {}).setdefault(tenant_id, [])
+        record_id = self._next_id
+        self._next_id += 1
+        stored_payload = {"id": record_id, **payload}
+        tenant_bucket.append(stored_payload)
+        return record_id
+
+    def list_records(self, collection: str, tenant_id: str) -> List[Dict[str, Any]]:
+        return list(self._collections.get(collection, {}).get(tenant_id, []))
+
+    def delete_tenant(self, collection: str, tenant_id: str) -> int:
+        bucket = self._collections.get(collection, {}).pop(tenant_id, [])
+        return len(bucket)
+
+    def total_records(self, collection: str) -> int:
+        return sum(len(records) for records in self._collections.get(collection, {}).values())
+
+    def tenant_records(self, collection: str, tenant_id: str) -> int:
+        return len(self._collections.get(collection, {}).get(tenant_id, []))
 
 
 @dataclass
@@ -200,12 +235,31 @@ class SharedMemory:
         
         self.embedding_cache = EmbeddingCache(cache_size)
         self.metrics = MemoryMetrics()
-        
-        # Connect to Milvus and initialize collections
+
         self.connection_alias = None
-        self._connect_milvus()
-        self._initialize_collections()
-        
+        self._milvus_disabled = _is_truthy_env(os.getenv("TEST_DISABLE_MILVUS"))
+        self._in_memory_store: Optional[_InMemoryVectorStore] = None
+
+        if self._milvus_disabled:
+            self._in_memory_store = _InMemoryVectorStore(
+                [
+                    self.COLLECTION_EXPERT_KNOWLEDGE,
+                    self.COLLECTION_COLLABORATION_HISTORY,
+                    self.COLLECTION_PROBLEM_SOLUTIONS,
+                ]
+            )
+            logger.info(
+                "Milvus disabled via TEST_DISABLE_MILVUS; using in-memory backend",
+                extra={
+                    "milvus_uri": self.milvus_uri,
+                    "cache_size": cache_size,
+                },
+            )
+        else:
+            # Connect to Milvus and initialize collections
+            self._connect_milvus()
+            self._initialize_collections()
+
         logger.info(
             "Shared memory initialized",
             extra={
@@ -213,9 +267,211 @@ class SharedMemory:
                 "embedding_model": self.embedding_model,
                 "embedding_dimension": self.embedding_dimension,
                 "cache_size": cache_size,
+                "mode": "in_memory" if self._milvus_disabled else "milvus",
             }
         )
-    
+
+    def _using_in_memory_backend(self) -> bool:
+        return bool(self._milvus_disabled and self._in_memory_store is not None)
+
+    def _fallback_record_payload(
+        self,
+        collection: str,
+        tenant_id: str,
+        content: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        timestamp = int(time.time())
+        metadata_payload = dict(metadata or content.get("metadata") or {})
+        record: Dict[str, Any] = {
+            "tenant_id": tenant_id,
+            "metadata": metadata_payload,
+            "created_at": timestamp,
+        }
+
+        if collection == self.COLLECTION_EXPERT_KNOWLEDGE:
+            record.update(
+                {
+                    "expert_domain": str(content.get("expert_domain", "")),
+                    "content": str(content.get("content", "")),
+                    "updated_at": timestamp,
+                }
+            )
+        elif collection == self.COLLECTION_COLLABORATION_HISTORY:
+            participants = content.get("participating_agents", "")
+            if isinstance(participants, (list, tuple)):
+                participants_value = ", ".join(map(str, participants))
+            else:
+                participants_value = str(participants)
+            record.update(
+                {
+                    "interaction_id": str(content.get("interaction_id", "")),
+                    "initiator_agent": str(content.get("initiator_agent", "")),
+                    "participating_agents": participants_value,
+                    "task_description": str(content.get("task_description", "")),
+                }
+            )
+        elif collection == self.COLLECTION_PROBLEM_SOLUTIONS:
+            record.update(
+                {
+                    "problem": str(content.get("problem", "")),
+                    "solution": str(content.get("solution", "")),
+                }
+            )
+        else:
+            record.update({key: content.get(key) for key in content if key != "metadata"})
+        return record
+
+    def _fallback_store_knowledge(
+        self,
+        collection: str,
+        tenant_id: str,
+        content: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+        embedding: Optional[List[float]] = None,
+    ) -> int:
+        if not self._using_in_memory_backend():
+            raise MilvusException("In-memory backend not initialized")
+        _ = embedding
+        payload = self._fallback_record_payload(collection, tenant_id, content, metadata)
+        record_id = self._in_memory_store.store(collection, tenant_id, payload)
+        self.metrics.storage_operations += 1
+        logger.info(
+            "Stored knowledge using in-memory backend",
+            extra={"collection": collection, "tenant_id": tenant_id, "record_id": record_id},
+        )
+        return record_id
+
+    def _fallback_similarity(self, query: str, haystack: str) -> float:
+        if not query:
+            return 1.0
+        query_norm = query.strip().lower()
+        if not query_norm:
+            return 1.0
+        haystack_norm = haystack.lower()
+        if query_norm in haystack_norm:
+            return 0.95
+        return 0.25
+
+    def _fallback_search_knowledge(
+        self,
+        collection: str,
+        tenant_id: str,
+        query: str,
+        top_k: int,
+        threshold: float,
+    ) -> List[Dict[str, Any]]:
+        if not self._using_in_memory_backend():
+            return []
+        start_time = time.time()
+        results: List[Dict[str, Any]] = []
+        similarities: List[float] = []
+        records = self._in_memory_store.list_records(collection, tenant_id)
+
+        for record in records:
+            haystack_parts = []
+            if collection == self.COLLECTION_EXPERT_KNOWLEDGE:
+                haystack_parts.extend(
+                    [record.get("content", ""), record.get("expert_domain", "")]
+                )
+            elif collection == self.COLLECTION_COLLABORATION_HISTORY:
+                haystack_parts.extend(
+                    [
+                        record.get("interaction_id", ""),
+                        record.get("initiator_agent", ""),
+                        record.get("participating_agents", ""),
+                        record.get("task_description", ""),
+                    ]
+                )
+            elif collection == self.COLLECTION_PROBLEM_SOLUTIONS:
+                haystack_parts.extend([record.get("problem", ""), record.get("solution", "")])
+            else:
+                haystack_parts.append(json.dumps(record, default=str))
+            haystack = " ".join(str(part) for part in haystack_parts if part)
+            similarity = self._fallback_similarity(query, haystack)
+            if similarity >= threshold:
+                result = {
+                    "id": record.get("id"),
+                    "similarity_score": similarity,
+                    "tenant_id": tenant_id,
+                    "metadata": dict(record.get("metadata") or {}),
+                    "created_at": record.get("created_at"),
+                }
+                if collection == self.COLLECTION_EXPERT_KNOWLEDGE:
+                    result.update(
+                        {
+                            "expert_domain": record.get("expert_domain"),
+                            "content": record.get("content"),
+                            "updated_at": record.get("updated_at"),
+                        }
+                    )
+                elif collection == self.COLLECTION_COLLABORATION_HISTORY:
+                    result.update(
+                        {
+                            "interaction_id": record.get("interaction_id"),
+                            "initiator_agent": record.get("initiator_agent"),
+                            "participating_agents": record.get("participating_agents"),
+                            "task_description": record.get("task_description"),
+                        }
+                    )
+                elif collection == self.COLLECTION_PROBLEM_SOLUTIONS:
+                    result.update(
+                        {
+                            "problem": record.get("problem"),
+                            "solution": record.get("solution"),
+                        }
+                    )
+                results.append(result)
+                similarities.append(similarity)
+            if len(results) >= top_k:
+                break
+
+        duration = time.time() - start_time
+        self.metrics.add_search_latency(duration)
+        if similarities:
+            self.metrics.avg_similarity = sum(similarities) / len(similarities)
+
+        logger.info(
+            "Search completed using in-memory backend",
+            extra={
+                "collection": collection,
+                "tenant_id": tenant_id,
+                "results_count": len(results),
+                "duration": duration,
+            },
+        )
+        return results
+
+    def _fallback_get_collection_stats(self, collection: str, tenant_id: Optional[str]) -> Dict[str, Any]:
+        if not self._using_in_memory_backend():
+            return {}
+        stats = {
+            "collection": collection,
+            "total_records": self._in_memory_store.total_records(collection),
+            "index_status": "in_memory",
+        }
+        if tenant_id:
+            stats["tenant_records"] = self._in_memory_store.tenant_records(collection, tenant_id)
+        else:
+            stats["tenant_records"] = stats["total_records"]
+        return stats
+
+    def _fallback_delete_by_tenant(self, collection: str, tenant_id: str) -> int:
+        if not self._using_in_memory_backend():
+            return 0
+        removed = self._in_memory_store.delete_tenant(collection, tenant_id)
+        if removed:
+            logger.info(
+                "Deleted tenant data using in-memory backend",
+                extra={"collection": collection, "tenant_id": tenant_id, "count": removed},
+            )
+        else:
+            logger.debug(
+                "No tenant data to delete in in-memory backend",
+                extra={"collection": collection, "tenant_id": tenant_id},
+            )
+        return removed
+
     def _connect_milvus(self):  # pragma: no cover
         """Connect to Milvus server.
         
@@ -565,8 +821,24 @@ class SharedMemory:
             
             # Add tenant_id and metadata to content
             content["tenant_id"] = tenant_id
-            if metadata:
+            if metadata is not None:
                 content["metadata"] = metadata
+
+            if self._using_in_memory_backend():
+                metadata_source = metadata if metadata is not None else content.get("metadata")
+                if isinstance(metadata_source, Mapping):
+                    metadata_payload = dict(metadata_source)
+                elif metadata_source is None:
+                    metadata_payload = {}
+                else:
+                    metadata_payload = {"value": metadata_source}
+                return self._fallback_store_knowledge(
+                    collection,
+                    tenant_id,
+                    dict(content),
+                    metadata=metadata_payload,
+                    embedding=embedding,
+                )
             
             # Generate embedding if not provided
             if embedding is None:
@@ -637,6 +909,15 @@ class SharedMemory:
             
             if not query or not isinstance(query, str):
                 raise ValueError("Query must be a non-empty string")
+
+            if self._using_in_memory_backend():
+                return self._fallback_search_knowledge(
+                    collection,
+                    tenant_id,
+                    query,
+                    top_k,
+                    threshold,
+                )
             
             # Generate query embedding
             query_embedding = self._generate_embedding(query)
@@ -815,6 +1096,26 @@ class SharedMemory:
         try:
             if not contents:
                 return []
+
+            if self._using_in_memory_backend():
+                ids: List[int] = []
+                for content in contents:
+                    metadata_source = content.get("metadata")
+                    if isinstance(metadata_source, Mapping):
+                        metadata_payload = dict(metadata_source)
+                    elif metadata_source is None:
+                        metadata_payload = {}
+                    else:
+                        metadata_payload = {"value": metadata_source}
+                    ids.append(
+                        self._fallback_store_knowledge(
+                            collection,
+                            tenant_id,
+                            dict(content),
+                            metadata=metadata_payload,
+                        )
+                    )
+                return ids
             
             # Generate embeddings if not provided
             if embeddings is None:
@@ -923,6 +1224,9 @@ class SharedMemory:
         Dict
             Collection statistics.
         """
+        if self._using_in_memory_backend():
+            return self._fallback_get_collection_stats(collection, tenant_id)
+
         try:
             collection_obj = self._get_collection(collection)
             
@@ -974,6 +1278,9 @@ class SharedMemory:
         int
             Number of deleted records.
         """
+        if self._using_in_memory_backend():
+            return self._fallback_delete_by_tenant(collection, tenant_id)
+
         try:
             collection_obj = self._get_collection(collection)
             uses_partition_key = self._collection_uses_partition_key(collection_obj)
@@ -1036,6 +1343,7 @@ class SharedMemory:
         """
         health_status = {
             "milvus_connected": False,
+            "mode": "milvus",
             "collections": {},
             "cache_stats": {
                 "size": self.embedding_cache.size(),
@@ -1049,6 +1357,22 @@ class SharedMemory:
                 "errors_count": self.metrics.errors_count,
             },
         }
+
+        if self._using_in_memory_backend():
+            health_status["mode"] = "in_memory"
+            collections = [
+                self.COLLECTION_EXPERT_KNOWLEDGE,
+                self.COLLECTION_COLLABORATION_HISTORY,
+                self.COLLECTION_PROBLEM_SOLUTIONS,
+            ]
+            for collection_name in collections:
+                stats = self._fallback_get_collection_stats(collection_name, None)
+                health_status["collections"][collection_name] = {
+                    "status": "ready",
+                    "record_count": stats.get("total_records", 0),
+                    "index_status": stats.get("index_status", "in_memory"),
+                }
+            return health_status
         
         try:
             # Check Milvus connection - just check if we can list connections
@@ -1100,7 +1424,11 @@ class SharedMemory:
     def __del__(self):
         """Cleanup connection when object is destroyed."""
         try:
-            if hasattr(self, 'connection_alias') and self.connection_alias:
+            if (
+                not getattr(self, "_milvus_disabled", False)
+                and hasattr(self, "connection_alias")
+                and self.connection_alias
+            ):
                 connections.disconnect(self.connection_alias)
                 logger.debug(f"Disconnected from Milvus: {self.connection_alias}")
         except Exception:

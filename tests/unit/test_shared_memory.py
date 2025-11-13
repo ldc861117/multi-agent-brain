@@ -38,7 +38,7 @@ sys.modules['numpy'] = MockNumpy()
 os.environ.setdefault("TEST_DISABLE_MILVUS", "1")
 
 # Now import the module
-from agents.shared_memory import SharedMemory, MemoryMetrics
+from agents.shared_memory import SharedMemory, MemoryMetrics, MilvusException as SharedMilvusException
 
 
 class TestSharedMemory:
@@ -262,7 +262,7 @@ class TestSharedMemoryErrorHandling:
         mock_has_collection.side_effect = MockMilvusException("Collection error")
         
         with patch.dict(os.environ, {"CHAT_API_KEY": "test-key", "TEST_DISABLE_MILVUS": "0"}, clear=False):
-            with pytest.raises(MockMilvusException):
+            with pytest.raises(SharedMilvusException):
                 SharedMemory()
 
 

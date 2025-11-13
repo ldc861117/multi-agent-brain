@@ -75,6 +75,7 @@ async def test_role_defaults_follow_expert_kind_and_layer_coercion() -> None:
         name = "devops_agent"
         expert_kind = ExpertKind.DEVOPS_EXPERT
         layer = "expert"
+        role = ""
 
         async def handle_message(self, message, conversation_state=None):
             return AgentResponse("ok", {"message": "seen"})

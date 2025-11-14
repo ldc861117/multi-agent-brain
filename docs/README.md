@@ -23,6 +23,9 @@
 - [Quick Reference](guides/quick-reference.md): Snippets and command cheatsheets for daily work.
 - [Troubleshooting](guides/troubleshooting.md): Diagnose common issues across the LLM client, Milvus, and agent coordination layers.
 
+### Design Documents
+- [Browser Tool Design](design/browser_tool.md): Web search and navigation capabilities for agents (Tavily/DuckDuckGo, Playwright, explicit memory persistence).
+
 ### Decisions & History
 - [Architecture Decision Records](adr/README.md): Active decisions. Historical context lives in dated ADRs.
 - [Archive](archive/README.md): Deprecated or legacy documents retained for reference.

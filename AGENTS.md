@@ -19,6 +19,7 @@
 | LLM & Memory 速查 | OpenAI Client / SharedMemory 调用片段 | [§6](#6-llm--memory-速查表-llm--memory-quick-reference) |
 | 反模式清单 | 禁止操作清单 | [§7](#7-常见反模式-anti-patterns) |
 | 监控与排障 | 指标采集、常见问题 | [§8](#8-监控与排障-observability--troubleshooting) |
+| 工具集成 | Browser Tool 与其他工具 | [§9](#9-工具集成-tool-integration) |
 
 ---
 
@@ -240,3 +241,121 @@ print({
 | 并发任务失败 | `CoordinationAgent.dispatch_to_experts` 日志 | 检查目标 Agent 是否注册，必要时将条目加入 `channels` 与 `routing` |
 
 > 更多运行命令请参考 [README.md](README.md) 与 [Code Map](docs/architecture/codemap.md)。
+
+---
+
+## 9. 工具集成 (Tool Integration)
+
+### 9.1 Browser Tool (Web Search & Navigation)
+
+**Status**: Design phase (see [docs/design/browser_tool.md](docs/design/browser_tool.md))  
+**Purpose**: Enable agents to search the web, navigate pages, and extract content.
+
+**Quick Start** (after implementation):
+```python
+from tools.browser_tool import BrowserTool, BrowserResult
+
+# Initialize with agent-specific config
+browser = BrowserTool(agent_name="coordination")
+
+# Simple search
+result = await browser.search("Milvus vector database", max_results=5)
+
+# Search + visit top results
+result = await browser.search_and_visit(
+    query="Python async best practices",
+    max_results=5,
+    visit_top_n=2
+)
+
+# Access results
+for search_result in result.search_results:
+    print(f"{search_result.title}: {search_result.url}")
+
+for page in result.visited_pages:
+    print(f"Content from {page.title}: {page.text[:200]}...")
+```
+
+**Configuration** (in `config.yaml`):
+```yaml
+api_config:
+  browser_tool:
+    enabled: true
+    search_provider: "tavily"  # or "bing", "google", "searxng", "duckduckgo"
+    search_api_key: null  # Set via BROWSER_SEARCH_API_KEY
+    fallback_provider: "duckduckgo"
+    browser_engine: "playwright"
+    search_timeout: 10
+    navigation_timeout: 30
+    max_retries: 3
+```
+
+**Memory Persistence** (explicit opt-in):
+```python
+# Agent decides whether to persist
+if self._should_persist_web_results(user_query):
+    memory = SharedMemory(agent_name=self.name)
+    for page in browser_result.visited_pages:
+        await memory.store_knowledge(
+            collection="web_snapshots",
+            tenant_id=self._get_tenant_id(),
+            content={"url": page.url, "title": page.title, "text": page.text},
+            metadata={"source": "browser_tool", "query": browser_result.query}
+        )
+```
+
+**Key Design Principles**:
+- **Search Provider Hierarchy**: Tavily (primary) → DuckDuckGo (fallback) → Optional (Bing, Google CSE)
+- **Explicit Memory Control**: Agents choose when to persist (no automatic writes)
+- **Configuration Reuse**: Browser tool inherits agent's `OpenAIClientWrapper` for synthesis
+- **Error Handling**: Graceful degradation when search/navigation fails
+
+**Related Documentation**:
+- Design doc: [docs/design/browser_tool.md](docs/design/browser_tool.md)
+- Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md#h3--productization-extensibility--packaging) (H3 milestone)
+- Configuration guide: [docs/configuration/browser_tool.md](docs/configuration/browser_tool.md) (coming soon)
+
+### 9.2 Tool Integration Patterns
+
+**When to create a new tool**:
+- Tool has standalone functionality (can be tested independently)
+- Multiple agents may use the tool
+- Tool requires separate configuration surface
+- Tool has its own dependencies/external integrations
+
+**Tool Module Structure**:
+```
+tools/
+  __init__.py
+  my_tool.py          # Main tool implementation
+  my_tool_config.py   # Configuration dataclasses (if complex)
+tests/
+  unit/
+    test_my_tool.py   # Unit tests with mocked dependencies
+  integration/
+    test_my_tool_integration.py  # Integration tests with real services
+```
+
+**Configuration Integration**:
+1. Add config section to `api_config` in `config.yaml`
+2. Create `MyToolConfig` dataclass in `utils/config_manager.py`
+3. Add `get_my_tool_config(agent_name)` utility function
+4. Support agent-specific overrides via `agent_overrides.<agent>.my_tool`
+
+**Error Handling in Tools**:
+```python
+try:
+    result = await tool.execute()
+except ToolSpecificError as e:
+    logger.exception(f"Tool failed: {e}")
+    # Return partial/degraded result or raise
+    return PartialResult(error=str(e))
+```
+
+**Testing Checklist**:
+- [ ] Unit tests with mocked external dependencies
+- [ ] Integration tests with real services (use env var to skip in CI)
+- [ ] Configuration loading tests (env vars + YAML)
+- [ ] Agent integration tests (tool invoked from agent)
+- [ ] Error handling tests (timeouts, invalid responses)
+- [ ] Memory persistence tests (if applicable)

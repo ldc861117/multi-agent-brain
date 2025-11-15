@@ -2,7 +2,25 @@
 
 ## Issues Fixed
 
-### 1. Async Mock Issues
+### 1. Missing Await on Async Method (PRIMARY FIX)
+**Problem**: Tests were failing with `'coroutine' object has no attribute 'get'` error.
+
+**Root Cause**: In `TavilySearchEngine.query()`, the code was calling `response.json()` without awaiting it. In httpx, the `json()` method is async and returns a coroutine that must be awaited.
+
+**Fix**: Changed from:
+```python
+data = response.json()
+```
+
+To:
+```python
+data = await response.json()
+```
+
+**Files Changed**:
+- `tools/browser_tool.py` (line 152)
+
+### 2. Async Mock Issues
 **Problem**: Tests were failing with `'coroutine' object has no attribute 'get'` error.
 
 **Root Cause**: The `json()` method on httpx response objects is async, but the mocks were setting it as a regular attribute instead of an AsyncMock.
@@ -79,6 +97,11 @@ After these fixes, all browser tool adapter tests should pass:
 
 ## Summary
 
-The main issue was improper async mocking for httpx response objects. In Python's httpx library, the `json()` method is async (returns a coroutine), so it needs to be mocked with `AsyncMock` rather than setting `.return_value` on a non-async mock.
+The primary issue was a missing `await` keyword when calling `response.json()` in the Tavily search engine implementation. In httpx (unlike requests), the `json()` method is async and returns a coroutine that must be awaited.
 
-This is a common pitfall when testing async HTTP clients - any method that's async in the real implementation must be mocked as `AsyncMock` in tests.
+Secondary issues included:
+1. Improper async mocking in tests (though the tests were actually correct in using `AsyncMock` for the `json()` method)
+2. Incorrect module patch paths
+3. Configuration issues in specific tests
+
+This is a common pitfall when migrating from synchronous HTTP clients (like `requests`) to async clients (like `httpx`) - all async methods must be awaited, including `.json()`.

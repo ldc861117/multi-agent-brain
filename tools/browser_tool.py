@@ -149,7 +149,7 @@ class TavilySearchEngine(SearchEngine):
             async with httpx.AsyncClient(timeout=self.config.search_timeout) as client:
                 response = await client.post(url, json=payload, headers=headers)
                 response.raise_for_status()
-                data = response.json()
+                data = await response.json()
                 
                 results = []
                 for item in data.get("results", []):

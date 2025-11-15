@@ -253,9 +253,10 @@ class TestTavilySearchEngine:
         with patch('httpx.AsyncClient') as mock_client:
             mock_response = AsyncMock()
             mock_response.status_code = 429
-            mock_response.raise_for_status.side_effect = __import__('httpx').HTTPStatusError(
+            # raise_for_status is NOT async, so use Mock instead of AsyncMock
+            mock_response.raise_for_status = Mock(side_effect=__import__('httpx').HTTPStatusError(
                 "Rate limit", request=Mock(), response=mock_response
-            )
+            ))
             
             mock_context = AsyncMock()
             mock_context.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -272,9 +273,10 @@ class TestTavilySearchEngine:
         with patch('httpx.AsyncClient') as mock_client:
             mock_response = AsyncMock()
             mock_response.status_code = 401
-            mock_response.raise_for_status.side_effect = __import__('httpx').HTTPStatusError(
+            # raise_for_status is NOT async, so use Mock instead of AsyncMock
+            mock_response.raise_for_status = Mock(side_effect=__import__('httpx').HTTPStatusError(
                 "Unauthorized", request=Mock(), response=mock_response
-            )
+            ))
             
             mock_context = AsyncMock()
             mock_context.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -488,9 +490,10 @@ class TestBrowserTool:
             with patch('httpx.AsyncClient') as mock_client:
                 mock_response = AsyncMock()
                 mock_response.status_code = 500
-                mock_response.raise_for_status.side_effect = __import__('httpx').HTTPStatusError(
+                # raise_for_status is NOT async, so use Mock instead of AsyncMock
+                mock_response.raise_for_status = Mock(side_effect=__import__('httpx').HTTPStatusError(
                     "Server error", request=Mock(), response=mock_response
-                )
+                ))
                 
                 mock_context = AsyncMock()
                 mock_context.__aenter__.return_value.post = AsyncMock(return_value=mock_response)

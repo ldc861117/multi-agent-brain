@@ -228,7 +228,7 @@ class TestTavilySearchEngine:
         """Test successful Tavily search."""
         engine = TavilySearchEngine(default_config)
         
-        with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+        with patch('httpx.AsyncClient') as mock_client:
             mock_response = AsyncMock()
             mock_response.json.return_value = tavily_search_results
             mock_response.raise_for_status = Mock()
@@ -250,7 +250,7 @@ class TestTavilySearchEngine:
         """Test Tavily rate limit error handling."""
         engine = TavilySearchEngine(default_config)
         
-        with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+        with patch('httpx.AsyncClient') as mock_client:
             mock_response = AsyncMock()
             mock_response.status_code = 429
             mock_response.raise_for_status.side_effect = __import__('httpx').HTTPStatusError(
@@ -269,7 +269,7 @@ class TestTavilySearchEngine:
         """Test Tavily authentication error handling."""
         engine = TavilySearchEngine(default_config)
         
-        with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+        with patch('httpx.AsyncClient') as mock_client:
             mock_response = AsyncMock()
             mock_response.status_code = 401
             mock_response.raise_for_status.side_effect = __import__('httpx').HTTPStatusError(
@@ -299,7 +299,7 @@ class TestDuckDuckGoSearchEngine:
         """Test successful DuckDuckGo search."""
         engine = DuckDuckGoSearchEngine(default_config)
         
-        with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+        with patch('httpx.AsyncClient') as mock_client:
             mock_response = AsyncMock()
             mock_response.text = duckduckgo_html
             mock_response.raise_for_status = Mock()
@@ -320,7 +320,7 @@ class TestDuckDuckGoSearchEngine:
         """Test DuckDuckGo timeout handling."""
         engine = DuckDuckGoSearchEngine(default_config)
         
-        with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+        with patch('httpx.AsyncClient') as mock_client:
             mock_context = AsyncMock()
             mock_context.__aenter__.return_value.post = AsyncMock(
                 side_effect=__import__('httpx').TimeoutException("Timeout")
@@ -423,7 +423,7 @@ class TestBrowserTool:
         with patch('tools.browser_tool.get_browser_tool_config', return_value=default_config):
             tool = BrowserTool(agent_name="test")
             
-            with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+            with patch('httpx.AsyncClient') as mock_client:
                 mock_response = AsyncMock()
                 mock_response.json.return_value = tavily_search_results
                 mock_response.raise_for_status = Mock()
@@ -467,7 +467,7 @@ class TestBrowserTool:
                     mock_response.raise_for_status = Mock()
                     return mock_response
             
-            with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+            with patch('httpx.AsyncClient') as mock_client:
                 mock_context = AsyncMock()
                 mock_context.__aenter__.return_value.post = mock_post
                 mock_client.return_value = mock_context
@@ -485,7 +485,7 @@ class TestBrowserTool:
         with patch('tools.browser_tool.get_browser_tool_config', return_value=default_config):
             tool = BrowserTool(agent_name="test")
             
-            with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+            with patch('httpx.AsyncClient') as mock_client:
                 mock_response = AsyncMock()
                 mock_response.status_code = 500
                 mock_response.raise_for_status.side_effect = __import__('httpx').HTTPStatusError(
@@ -521,7 +521,11 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_navigation_error_when_engine_disabled(self, default_config):
         """Test that navigation fails when browser engine is disabled."""
-        config = BrowserToolConfig(browser_engine="none")
+        config = BrowserToolConfig(
+            browser_engine="none",
+            search_provider="duckduckgo",  # Use DuckDuckGo to avoid API key requirement
+            search_api_key=None
+        )
         
         with patch('tools.browser_tool.get_browser_tool_config', return_value=config):
             tool = BrowserTool(agent_name="test")
@@ -542,7 +546,7 @@ class TestErrorHandling:
         with patch('tools.browser_tool.get_browser_tool_config', return_value=default_config):
             tool = BrowserTool(agent_name="test")
             
-            with patch('tools.browser_tool.httpx.AsyncClient') as mock_client:
+            with patch('httpx.AsyncClient') as mock_client:
                 mock_context = AsyncMock()
                 mock_context.__aenter__.return_value.post = AsyncMock(
                     side_effect=Exception("Connection error")

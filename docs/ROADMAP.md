@@ -69,8 +69,8 @@
      1. Define plugin manifest format (YAML/JSON) referencing runtime adapters already supported by agent scaffolds.
      2. Implement hot-reload mechanism (config reload or message-driven) that updates prompts/config without restart, guarded by existing tests.
      3. Provide dashboard/gallery section enumerating available tools, per-agent compatibility, and activation status.
-     4. **Browser Tool Integration**: Implement web search and browsing capabilities following the design in `docs/design/browser_tool.md` (Tavily API primary, DuckDuckGo fallback, Playwright navigation, explicit memory opt-in).
-   - **Success metrics**: Plugin add/remove cycle completes in <2 minutes without process restart; prompts reload without breaking ongoing sessions; documentation contains at least three curated tool examples; browser tool achieves <5s search latency (p95).
+     4. ✅ **Browser Tool Integration** (COMPLETED): Web search and browsing capabilities implemented following `docs/design/browser_tool.md` (Tavily API primary, DuckDuckGo fallback, Playwright navigation, explicit memory opt-in). Documentation in [docs/tools/browser_tool.md](tools/browser_tool.md), tests in [tests/unit/test_browser_tool_integration.py](../tests/unit/test_browser_tool_integration.py).
+   - **Success metrics**: Plugin add/remove cycle completes in <2 minutes without process restart; prompts reload without breaking ongoing sessions; documentation contains at least three curated tool examples; ✅ browser tool achieves <5s search latency (p95).
 
 2. **Milestone: Scenario-based demos with UI affordances**
    - **Intent**: Offer scripted walkthroughs (data retrieval, code analysis, DevOps triage) that highlight UI/UX flows and multi-agent collaboration.

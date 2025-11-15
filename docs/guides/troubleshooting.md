@@ -9,8 +9,12 @@
 | `Milvus connection refused` | Milvus container or remote service not running; URI incorrect. | Start Milvus with `make milvus-lite` or point `MILVUS_URI` to a reachable endpoint (e.g. `http://localhost:19530`). |
 | `embedding dimension mismatch (expected X, got Y)` | Embedding model changed without updating configuration. | Align `embedding_dimension` in `.env` or `api_config.agent_overrides` to match the model spec. |
 | `OpenAIError: Rate limit` | Provider throttling active connection. | Rotate API keys, increase `CHAT_API_MAX_RETRIES`/`CHAT_API_MAX_RETRY_DELAY`, or temporarily switch providers. |
-| `agent_overrides` ignored | Environment variables override YAML settings. | Remove overlapping `CHAT_API_*` or `EMBEDDING_API_*` entries, call `from utils import reload_config; reload_config()`, and restart long-lived services. |
+| `agent_overrides` ignored | Environment variables override YAML settings. | Remove overlapping `CHAT_API_*` or `EMBEDDING_API_*` or `BROWSER_*` entries, call `from utils import reload_config; reload_config()`, and restart long-lived services. |
 | `Studio` cannot connect | Network transports are down or ports occupied. | Verify `make run-network` is active and ports 8700/8050 are free. |
+| `SearchProviderError: API key missing` | Browser tool API key not configured. | Set `BROWSER_SEARCH_API_KEY` or use fallback provider: `BROWSER_SEARCH_PROVIDER=duckduckgo`. See [Browser Tool Configuration](../configuration/browser_tool.md). |
+| `NavigationError: playwright is required` | Playwright not installed or browser drivers missing. | Run `make setup-playwright` or `pip install playwright && playwright install chromium`. |
+| `RateLimitError: Tavily API rate limit exceeded` | Search API quota exhausted. | Wait for quota reset, enable fallback provider, or adjust `BROWSER_RATE_LIMIT_DELAY`. |
+| Browser tool search returns no results | Query malformed, provider offline, or rate limited. | Try fallback provider (`BROWSER_FALLBACK_PROVIDER=duckduckgo`), check provider status, or increase timeouts. |
 | Pytest environments leaking keys | `.env` loaded during tests or `patch.dict` used. | Follow the patterns in `tests/conftest.py` and rely on `pytest.MonkeyPatch` fixtures. |
 
 ## Diagnostic Tips

@@ -9,9 +9,13 @@
 
 ### Configuration
 - [Configuration Guide](configuration/guide.md): Understand configuration precedence, environment variables, agent overrides, and provider-specific notes.
+- [Browser Tool Configuration](configuration/browser_tool.md): Comprehensive reference for browser tool environment variables, YAML schema, and provider setup.
+
+### Tools
+- [Browser Tool User Guide](tools/browser_tool.md): Complete guide to web search and navigation capabilities, including search providers (Tavily, DuckDuckGo, etc.), Playwright setup, and agent integration patterns.
 
 ### Testing & Quality
-- [Testing Reference](testing/README.md): Explore the pytest layout, Makefile helpers, coverage workflow, and common pitfalls.
+- [Testing Reference](testing/README.md): Explore the pytest layout, Makefile helpers, coverage workflow, and common pitfalls (includes browser tool testing section).
 
 ### Architecture
 - [Architecture Overview](architecture/overview.md): High-level diagram and component responsibilities.

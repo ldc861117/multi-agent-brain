@@ -17,6 +17,9 @@ tests/
 │   ├── test_openai_client.py
 │   ├── test_shared_memory.py
 │   ├── test_shared_memory_minimal.py
+│   ├── test_browser_tool_adapter.py
+│   ├── test_browser_tool_integration.py  # Browser tool + agent integration
+│   ├── test_observability.py
 │   └── test_utils_coverage_boost.py
 ├── integration/           # Lightweight integration & smoke tests
 │   ├── test_demo_cli_smoke.py
@@ -90,7 +93,78 @@ Coverage settings are defined in `.coveragerc`. Notable points:
 3. **Environment bleed** – Avoid referencing `os.environ` directly in assertions; use the `clean_env` fixture pattern for deterministic behaviour.
 4. **Path-sensitive imports** – Always import project modules (`utils`, `agents`, etc.) without manipulating `sys.path`; `conftest.py` already handles root insertion.
 
-## 6. Adding New Tests
+## 6. Browser Tool Testing
+
+### Test Organization
+
+Browser tool tests are split across multiple files:
+
+- **`tests/unit/test_browser_tool_adapter.py`**: Unit tests for individual search engine adapters (Tavily, DuckDuckGo)
+- **`tests/unit/test_browser_tool_integration.py`**: Integration tests for browser tool usage within agents
+  - Tests `BaseAgent.tools()` descriptor generation
+  - Tests `CoordinationAgent` browser tool integration
+  - Tests heuristics for when to search
+  - Tests memory persistence logic
+
+### Running Browser Tool Tests
+
+```bash
+# Run all browser tool tests
+pytest tests/unit/test_browser_tool*.py -v
+
+# Run specific test file
+pytest tests/unit/test_browser_tool_integration.py -v
+
+# Run specific test
+pytest tests/unit/test_browser_tool_integration.py::test_base_agent_tools_returns_browser_descriptor_when_enabled -vv
+```
+
+### Mock Strategy
+
+Browser tool tests use comprehensive mocking to avoid real network calls:
+
+```python
+# Mock browser tool configuration
+@pytest.fixture
+def mock_browser_config(monkeypatch):
+    from utils.openai_client import BrowserToolConfig
+    monkeypatch.setattr(
+        "agents.base.get_browser_tool_config",
+        lambda _: BrowserToolConfig(enabled=True)
+    )
+
+# Mock browser tool instance
+mock_browser_tool = AsyncMock()
+mock_browser_tool.search = AsyncMock(return_value=mock_result)
+agent._browser_tool = mock_browser_tool
+```
+
+### Testing with Real Providers
+
+To test against real search providers (not recommended for CI):
+
+```bash
+# Set API key
+export BROWSER_SEARCH_API_KEY="tvly-your-test-key"
+
+# Run demo script
+python examples/browser_tool_demo.py
+
+# Or run specific integration test with real calls
+# (requires manual test marker)
+pytest tests/integration/ -k browser -v
+```
+
+### Adding Browser Tool Tests
+
+When adding new browser tool functionality:
+
+1. Add unit tests for core logic in `test_browser_tool_adapter.py`
+2. Add agent integration tests in `test_browser_tool_integration.py`
+3. Update mock fixtures in `tests/conftest.py` if needed
+4. Document test coverage in this guide
+
+## 7. Adding New Tests
 
 1. Place deterministic logic under `tests/unit/`.
 2. Use `tests/integration/` for smoke / CLI / network interactions that may rely on external services.

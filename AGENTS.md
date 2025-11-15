@@ -237,6 +237,9 @@ print({
 | 嵌入缓存命中率 | `SharedMemory.metrics.cache_hit_ratio` | 调整 `SharedMemory(cache_size=...)`，优先使用批量接口 |
 | Milvus 连接失败 | `memory.health_check()` 返回 `milvus_connected=False` | 确认 `MILVUS_URI` 为 HTTP(S) 或正确的本地端口，必要时使用 `make milvus-lite` |
 | LLM Provider 超时 | `logger` 中 `OpenAIError` | 在 `.env` 中调高 `CHAT_API_TIMEOUT`，或在 `config.yaml` 修改 `max_retry_delay` |
+| Browser Tool 搜索失败 | `logger` 中 `SearchProviderError` 或 `RateLimitError` | 检查 `BROWSER_SEARCH_API_KEY`；启用 fallback provider；调整 `BROWSER_RATE_LIMIT_DELAY` |
+| Playwright 初始化失败 | `NavigationError: playwright is required` | 执行 `make setup-playwright` 或 `pip install playwright && playwright install chromium` |
+| Browser Tool 延迟过高 | 搜索操作超过 10 秒 | 增加 `BROWSER_SEARCH_TIMEOUT`；启用缓存 `BROWSER_CACHE_ENABLED=true`；切换更快的 provider |
 | agent_overrides 未生效 | `CoordinationAgent` 日志仍显示默认模型 | 确认删除同名环境变量，执行 `utils.reload_config()` 或重启进程 |
 | 并发任务失败 | `CoordinationAgent.dispatch_to_experts` 日志 | 检查目标 Agent 是否注册，必要时将条目加入 `channels` 与 `routing` |
 
@@ -248,10 +251,10 @@ print({
 
 ### 9.1 Browser Tool (Web Search & Navigation)
 
-**Status**: Design phase (see [docs/design/browser_tool.md](docs/design/browser_tool.md))  
+**Status**: ✅ Implemented and tested  
 **Purpose**: Enable agents to search the web, navigate pages, and extract content.
 
-**Quick Start** (after implementation):
+**Quick Start**:
 ```python
 from tools.browser_tool import BrowserTool, BrowserResult
 
@@ -311,9 +314,12 @@ if self._should_persist_web_results(user_query):
 - **Error Handling**: Graceful degradation when search/navigation fails
 
 **Related Documentation**:
-- Design doc: [docs/design/browser_tool.md](docs/design/browser_tool.md)
-- Roadmap: [docs/ROADMAP.md](docs/ROADMAP.md#h3--productization-extensibility--packaging) (H3 milestone)
-- Configuration guide: [docs/configuration/browser_tool.md](docs/configuration/browser_tool.md) (coming soon)
+- **User guide**: [docs/tools/browser_tool.md](docs/tools/browser_tool.md) - Complete usage guide
+- **Configuration**: [docs/configuration/browser_tool.md](docs/configuration/browser_tool.md) - Configuration reference
+- **Design**: [docs/design/browser_tool.md](docs/design/browser_tool.md) - Design decisions
+- **Tests**: [tests/unit/test_browser_tool_integration.py](tests/unit/test_browser_tool_integration.py)
+- **Example**: [examples/browser_tool_demo.py](examples/browser_tool_demo.py)
+- **Roadmap**: [docs/ROADMAP.md](docs/ROADMAP.md#h3--productization-extensibility--packaging) (H3 milestone)
 
 ### 9.2 Tool Integration Patterns
 

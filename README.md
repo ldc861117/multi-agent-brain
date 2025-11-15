@@ -11,6 +11,7 @@
 - ✅ **Coordination pipeline implemented** — [CoordinationAgent](agents/coordination/agent.py) analyses incoming questions, retrieves Milvus-backed knowledge, dispatches experts, and persists collaboration traces. The flow is exercised end-to-end in [examples/coordination_agent_example.py](examples/coordination_agent_example.py) and the offline harness at [scripts/verify_multi_expert_dispatch.py](scripts/verify_multi_expert_dispatch.py).
 - ✅ **Provider-agnostic configuration** — `ConfigManager` separates chat and embedding providers with per-agent overrides. Behaviour and precedence are covered by [utils/test_env_config.py](utils/test_env_config.py) and [tests/unit/test_openai_client.py](tests/unit/test_openai_client.py).
 - ✅ **Shared memory with caching & metrics** — [SharedMemory](agents/shared_memory.py) integrates with Milvus, exposes an embedding cache, and tracks usage statistics. Coverage lives in [tests/unit/test_shared_memory.py](tests/unit/test_shared_memory.py) and [tests/unit/test_shared_memory_minimal.py](tests/unit/test_shared_memory_minimal.py).
+- ✅ **Browser tool integration** — Agents can search the web (Tavily, DuckDuckGo, Bing, Google, SearXNG) and navigate pages via Playwright. The tool is documented in [docs/tools/browser_tool.md](docs/tools/browser_tool.md) with tests in [tests/unit/test_browser_tool_integration.py](tests/unit/test_browser_tool_integration.py) and a demo at [examples/browser_tool_demo.py](examples/browser_tool_demo.py).
 - ✅ **Observability baseline** — Structured logging with correlation IDs plus an opt-in `/metrics` JSON endpoint is provided by [utils/observability.py](utils/observability.py) and exercised in [tests/unit/test_observability.py](tests/unit/test_observability.py). Details live in the [Observability baseline milestone](docs/ROADMAP.md#h2--uiux-enablement-operator-visibility--interaction).
 - 📚 **Documentation-first workflow** — Comprehensive guides reside in [docs/README.md](docs/README.md), with agent specifics in [AGENTS.md](AGENTS.md) and testing practices in [docs/testing/README.md](docs/testing/README.md).
 
@@ -62,10 +63,11 @@ All agents inherit from `BaseAgent` and use `AgentResponse`. See [AGENTS.md](AGE
 | --- | --- | --- | --- |
 | Chat API | `.env` (`CHAT_API_*`) | `CHAT_API_BASE_URL`, `CHAT_API_KEY`, `CHAT_API_PROVIDER`, `CHAT_API_MODEL`, `CHAT_API_TIMEOUT`, `CHAT_API_MAX_RETRIES`, … | Required for chat completions. Providers include `openai`, `ollama`, or `custom`. |
 | Embedding API | `.env` (`EMBEDDING_API_*`) | `EMBEDDING_API_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_API_PROVIDER`, `EMBEDDING_API_MODEL`, `EMBEDDING_API_TIMEOUT`, … | Optional key for local providers; falls back to chat API settings when unset. |
+| Browser Tool | `.env` (`BROWSER_*`) | `BROWSER_TOOL_ENABLED`, `BROWSER_SEARCH_PROVIDER`, `BROWSER_SEARCH_API_KEY`, `BROWSER_ENGINE`, `BROWSER_SEARCH_TIMEOUT`, … | Web search and navigation capabilities. Supports Tavily, DuckDuckGo, Bing, Google, SearXNG. See [docs/tools/browser_tool.md](docs/tools/browser_tool.md) and [docs/configuration/browser_tool.md](docs/configuration/browser_tool.md). |
 | Legacy fallback | `.env` (`OPENAI_*`) | `OPENAI_API_KEY`, `OPENAI_API_BASE_URL` | Read only when the new `CHAT_API_*` / `EMBEDDING_API_*` variables are missing. |
 | Per-agent env overrides | `.env` | `COORDINATION_AGENT_MODEL`, `PYTHON_EXPERT_EMBEDDING_MODEL`, etc. | Highest precedence for individual agents; override YAML defaults. |
-| YAML defaults | [`config.yaml`](config.yaml) → `api_config.chat_api` / `embedding_api` | Provider, model, timeout, retry configuration, embedding dimensions. | Applies when no environment override is present. |
-| Agent overrides (YAML) | `config.yaml → api_config.agent_overrides.<agent>` | `chat_model`, `embedding_model`, `embedding_dimension`, `answer_verbose`. | Used by `utils.get_agent_config("<agent>")` and `OpenAIClientWrapper`. |
+| YAML defaults | [`config.yaml`](config.yaml) → `api_config.chat_api` / `embedding_api` / `browser_tool` | Provider, model, timeout, retry configuration, embedding dimensions. | Applies when no environment override is present. |
+| Agent overrides (YAML) | `config.yaml → api_config.agent_overrides.<agent>` | `chat_model`, `embedding_model`, `embedding_dimension`, `answer_verbose`, `browser_tool.*`. | Used by `utils.get_agent_config("<agent>")` and `OpenAIClientWrapper`. |
 | Network wiring | `config.yaml → channels`, `routing` | Channel entrypoints, visibility, escalation targets. | Controls which agents the coordination layer can dispatch to. |
 | Validation tooling | CLI | `python -m utils.config_validator --path config.yaml --default config.default.yaml` | Validates and optionally repairs YAML against the template. |
 
@@ -93,12 +95,18 @@ See the [Observability baseline milestone](docs/ROADMAP.md#h2--uiux-enablement-o
    ```bash
    cp .env.example .env
    # Set CHAT_API_* and (optionally) EMBEDDING_API_* values
+   # Optionally configure browser tool: BROWSER_SEARCH_API_KEY, BROWSER_SEARCH_PROVIDER
    ```
-3. Launch the OpenAgents network:
+3. (Optional) Install browser automation for full web navigation:
+   ```bash
+   make setup-playwright
+   # Or manually: pip install playwright && playwright install chromium
+   ```
+4. Launch the OpenAgents network:
    ```bash
    make run-network
    ```
-4. Smoke-test the deployment:
+5. Smoke-test the deployment:
    ```bash
    curl http://localhost:8700/health
    make test-fast
@@ -154,10 +162,11 @@ Each script documents its prerequisites; prefer running them from an activated v
 
 ## Troubleshooting
 
-- **`agent_overrides` appear ignored** — Environment variables take precedence; unset conflicting `CHAT_API_*` / `EMBEDDING_API_*` entries and call `from utils.config_manager import reload_config; reload_config()` or restart the process.
+- **`agent_overrides` appear ignored** — Environment variables take precedence; unset conflicting `CHAT_API_*` / `EMBEDDING_API_*` / `BROWSER_*` entries and call `from utils.config_manager import reload_config; reload_config()` or restart the process.
 - **Milvus connection failures** — Confirm `MILVUS_URI` points to a reachable endpoint and (for local development) Docker is running `make milvus-lite`. The troubleshooting table in [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) lists common error codes.
+- **Browser tool failures** — Verify search provider credentials (`BROWSER_SEARCH_API_KEY`), check Playwright installation (`playwright --version`), or disable browser automation (`BROWSER_ENGINE=none`). See [docs/tools/browser_tool.md#troubleshooting](docs/tools/browser_tool.md#troubleshooting) for detailed diagnostics.
 - **Unexpected network calls during tests** — Follow the fixtures in [tests/conftest.py](tests/conftest.py) and rely on `pytest.MonkeyPatch`; avoid `patch.dict` or loading `.env` files inline.
-- **Rate limits or timeouts** — Adjust `CHAT_API_MAX_RETRIES`, `CHAT_API_MAX_RETRY_DELAY`, or switch providers using the configuration matrix above.
+- **Rate limits or timeouts** — Adjust `CHAT_API_MAX_RETRIES`, `CHAT_API_MAX_RETRY_DELAY`, `BROWSER_SEARCH_TIMEOUT`, or switch providers using the configuration matrix above.
 
 ## Documentation Map
 

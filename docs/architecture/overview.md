@@ -14,15 +14,18 @@
 │             ▲                         ▲                     │
 │             │ agent responses         │ shared utilities     │
 └─────────────┴─────────────────────────┴─────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────┐
-│ SharedMemory (Milvus + Embedding Cache)                     │
-│ • Collections: expert_knowledge, collaboration_history, ... │
-│ • Embedding cache & metrics (hit ratio, request counts)     │
-└─────────────────────────────────────────────────────────────┘
-              │
-              ▼
+              │                         │
+              │                         └─────────────┐
+              ▼                                       ▼
+┌─────────────────────────────────────┐  ┌──────────────────────┐
+│ SharedMemory (Milvus + Cache)       │  │ BrowserTool          │
+│ • expert_knowledge                  │  │ • Search (Tavily,    │
+│ • collaboration_history             │  │   DuckDuckGo, etc)   │
+│ • web_snapshots                     │  │ • Navigation         │
+│ • Embedding cache & metrics         │  │   (Playwright)       │
+└─────────────────────────────────────┘  │ • Content extraction │
+              │                          └──────────────────────┘
+              ▼                                       
 ┌─────────────────────────────────────────────────────────────┐
 │ OpenAIClientWrapper (provider-agnostic)                     │
 │ • Chat & embedding endpoints                                │
@@ -65,17 +68,28 @@ See the [Configuration Guide](../configuration/guide.md) for precedence rules an
 
 ## 4. Knowledge & Memory Layer
 
-- **Milvus** provides persistent semantic search through collections such as `expert_knowledge` and `collaboration_history`.
+- **Milvus** provides persistent semantic search through collections such as `expert_knowledge`, `collaboration_history`, and `web_snapshots`.
 - **EmbeddingCache** deduplicates embedding calls and tracks metrics.
 - **SharedMemory** exposes `store_knowledge`, `search_knowledge`, and health checks. Deeper internals are documented in [Shared Memory Deep Dive](shared-memory.md).
 
-## 5. Testing & Observability Hooks
+## 5. Tool Integration Layer
 
-- Unit suites validate configuration loading, OpenAI client behaviour, shared memory storage, and coverage utilities. Refer to the [Testing Reference](../testing/README.md).
-- Logging leverages `loguru` with defaults defined in `config.yaml`'s `logging` section.
-- Metrics from `SharedMemory.metrics` expose cache hit ratios and embedding call counts, useful for future observability integrations.
+- **BrowserTool** enables agents to search the web and navigate pages:
+  - Multiple search providers (Tavily, DuckDuckGo, Bing, Google, SearXNG)
+  - Browser automation via Playwright for full page navigation
+  - Content extraction using BeautifulSoup
+  - Explicit opt-in for memory persistence
+- Agents access tools through `BaseAgent.tools()` and `_get_browser_tool()`
+- Tool configuration follows the same override patterns as LLM APIs
+- See [Browser Tool Guide](../tools/browser_tool.md) for usage details
 
-## 6. Further Reading
+## 6. Testing & Observability Hooks
+
+- Unit suites validate configuration loading, OpenAI client behaviour, shared memory storage, browser tool integration, and coverage utilities. Refer to the [Testing Reference](../testing/README.md).
+- Logging leverages `loguru` with defaults defined in `config.yaml`'s `logging` section. Browser tool operations include structured logging with correlation IDs.
+- Metrics from `SharedMemory.metrics` expose cache hit ratios and embedding call counts. Browser tool usage is tracked via the observability system when `ENABLE_METRICS=true`.
+
+## 7. Further Reading
 
 - [Code Map](codemap.md) – Directory-level breakdown and runtime pathways.
 - [Agent Interaction Patterns](../guides/interaction.md) – How messages move between agents.

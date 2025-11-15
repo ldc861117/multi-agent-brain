@@ -20,25 +20,27 @@ data = await response.json()
 **Files Changed**:
 - `tools/browser_tool.py` (line 152)
 
-### 2. Async Mock Issues
-**Problem**: Tests were failing with `'coroutine' object has no attribute 'get'` error.
+### 2. Mixed Async/Sync Mock Issues
+**Problem**: Tests were failing with `'coroutine' object is not iterable` error after the first fix.
 
-**Root Cause**: The `json()` method on httpx response objects is async, but the mocks were setting it as a regular attribute instead of an AsyncMock.
+**Root Cause**: When using `AsyncMock()` for the response object, ALL methods default to being async, including `raise_for_status()`. However, in the real httpx library, `raise_for_status()` is NOT async - it's a regular synchronous method. When the mock made it async, it returned a coroutine that wasn't being awaited.
 
-**Fix**: Changed from:
-```python
-mock_response.json.return_value = tavily_search_results
-```
+**Fix**: Two changes needed:
 
-To:
+1. Make `json()` explicitly async (it IS async in httpx):
 ```python
 mock_response.json = AsyncMock(return_value=tavily_search_results)
 ```
 
-**Files Changed**:
-- `tests/unit/test_browser_tool_adapter.py` (lines 233, 428)
+2. Make `raise_for_status()` explicitly sync (it is NOT async in httpx):
+```python
+mock_response.raise_for_status = Mock(side_effect=exception)
+```
 
-### 2. Error Message Matching
+**Files Changed**:
+- `tests/unit/test_browser_tool_adapter.py` (lines 233, 257, 277, 428, 494)
+
+### 3. Error Message Matching
 **Problem**: Test was expecting specific error message "authentication failed" but actual error was different.
 
 **Root Cause**: The error wrapping in the actual code produces a different message format.
@@ -51,7 +53,7 @@ with pytest.raises(SearchProviderError, match="(authentication failed|Tavily API
 **Files Changed**:
 - `tests/unit/test_browser_tool_adapter.py` (line 283)
 
-### 3. Module Import Paths
+### 4. Module Import Paths
 **Problem**: Tests were patching `'tools.browser_tool.httpx.AsyncClient'` which is incorrect.
 
 **Root Cause**: httpx is a separate module, not a submodule of tools.browser_tool.
@@ -69,7 +71,7 @@ with patch('httpx.AsyncClient')
 **Files Changed**:
 - `tests/unit/test_browser_tool_adapter.py` (multiple locations)
 
-### 4. Configuration Mock in Navigation Test
+### 5. Configuration Mock in Navigation Test
 **Problem**: Test was failing because BrowserTool initialization requires an API key when using Tavily provider.
 
 **Root Cause**: The default_config fixture uses Tavily as the provider, which requires an API key.
@@ -99,9 +101,20 @@ After these fixes, all browser tool adapter tests should pass:
 
 The primary issue was a missing `await` keyword when calling `response.json()` in the Tavily search engine implementation. In httpx (unlike requests), the `json()` method is async and returns a coroutine that must be awaited.
 
-Secondary issues included:
-1. Improper async mocking in tests (though the tests were actually correct in using `AsyncMock` for the `json()` method)
-2. Incorrect module patch paths
-3. Configuration issues in specific tests
+The secondary issue was in the test mocking strategy. When using `AsyncMock()` for the response object, ALL methods become async by default. However, httpx's Response object has MIXED async/sync methods:
+- `json()` is async (must be awaited)
+- `raise_for_status()` is sync (must NOT be awaited)
 
-This is a common pitfall when migrating from synchronous HTTP clients (like `requests`) to async clients (like `httpx`) - all async methods must be awaited, including `.json()`.
+When testing error paths, we need to explicitly make `raise_for_status()` a regular `Mock` rather than leaving it as the default `AsyncMock`.
+
+Additional issues fixed:
+1. Incorrect module patch paths (`tools.browser_tool.httpx` → `httpx`)
+2. Error message regex patterns to match actual error formats
+3. Configuration issues in specific tests (using DuckDuckGo to avoid API key requirements)
+
+**Key Lesson**: When mocking httpx responses with `AsyncMock`, explicitly override both async and sync methods to match the real API:
+```python
+mock_response = AsyncMock()
+mock_response.json = AsyncMock(return_value=data)  # Async in httpx
+mock_response.raise_for_status = Mock()  # Sync in httpx
+```

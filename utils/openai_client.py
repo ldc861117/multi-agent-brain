@@ -226,6 +226,100 @@ class EmbeddingAPIConfig:
 
 
 @dataclass
+class BrowserToolConfig:
+    """Configuration for browser tool (web search and navigation)."""
+    
+    enabled: bool = True
+    search_provider: str = "tavily"  # "tavily" | "bing" | "google" | "searxng" | "duckduckgo"
+    search_api_key: Optional[str] = None
+    search_api_base_url: Optional[str] = None  # For self-hosted SearXNG
+    fallback_provider: str = "duckduckgo"
+    browser_engine: str = "playwright"  # "playwright" | "selenium" | "none"
+    headless: bool = True
+    user_agent: str = "Mozilla/5.0 (multi-agent-brain/1.0)"
+    viewport_width: int = 1280
+    viewport_height: int = 720
+    search_timeout: int = 10
+    navigation_timeout: int = 30
+    extraction_timeout: int = 15
+    max_retries: int = 3
+    retry_delay: float = 2.0
+    rate_limit_delay: float = 1.0
+    max_content_length: int = 100000
+    extract_images: bool = False
+    extract_links: bool = True
+    cache_enabled: bool = False
+    cache_ttl: int = 3600
+    
+    @classmethod
+    def from_env(cls, *, load_env: bool = True) -> "BrowserToolConfig":
+        """Load browser tool configuration from environment variables."""
+        if load_env:
+            load_dotenv()
+        
+        # Helper to parse bool env vars
+        def _parse_bool(value: Optional[str], default: bool) -> bool:
+            if value is None:
+                return default
+            value_lower = value.strip().lower()
+            return value_lower in ("true", "1", "yes", "on")
+        
+        enabled = _parse_bool(_get_env_value("BROWSER_TOOL_ENABLED"), True)
+        
+        search_provider = _get_env_value("BROWSER_SEARCH_PROVIDER", default="tavily")
+        if search_provider:
+            search_provider = search_provider.strip()
+        
+        search_api_key_raw = _get_env_value("BROWSER_SEARCH_API_KEY", ("TAVILY_API_KEY",))
+        search_api_key: Optional[str] = None
+        if search_api_key_raw is not None:
+            search_api_key = search_api_key_raw.strip() if isinstance(search_api_key_raw, str) else str(search_api_key_raw)
+        
+        search_api_base_url_raw = _get_env_value("BROWSER_SEARCH_BASE_URL")
+        search_api_base_url: Optional[str] = None
+        if search_api_base_url_raw is not None:
+            search_api_base_url = search_api_base_url_raw.strip() if isinstance(search_api_base_url_raw, str) else str(search_api_base_url_raw)
+        
+        fallback_provider = _get_env_value("BROWSER_FALLBACK_PROVIDER", default="duckduckgo")
+        if fallback_provider:
+            fallback_provider = fallback_provider.strip()
+        
+        browser_engine = _get_env_value("BROWSER_ENGINE", default="playwright")
+        if browser_engine:
+            browser_engine = browser_engine.strip()
+        
+        headless = _parse_bool(_get_env_value("BROWSER_HEADLESS"), True)
+        
+        user_agent = _get_env_value("BROWSER_USER_AGENT", default="Mozilla/5.0 (multi-agent-brain/1.0)")
+        if user_agent:
+            user_agent = user_agent.strip()
+        
+        return cls(
+            enabled=enabled,
+            search_provider=search_provider or "tavily",
+            search_api_key=search_api_key,
+            search_api_base_url=search_api_base_url,
+            fallback_provider=fallback_provider or "duckduckgo",
+            browser_engine=browser_engine or "playwright",
+            headless=headless,
+            user_agent=user_agent or "Mozilla/5.0 (multi-agent-brain/1.0)",
+            viewport_width=int(_get_env_value("BROWSER_VIEWPORT_WIDTH", default="1280") or 1280),
+            viewport_height=int(_get_env_value("BROWSER_VIEWPORT_HEIGHT", default="720") or 720),
+            search_timeout=int(_get_env_value("BROWSER_SEARCH_TIMEOUT", default="10") or 10),
+            navigation_timeout=int(_get_env_value("BROWSER_NAVIGATION_TIMEOUT", default="30") or 30),
+            extraction_timeout=int(_get_env_value("BROWSER_EXTRACTION_TIMEOUT", default="15") or 15),
+            max_retries=int(_get_env_value("BROWSER_MAX_RETRIES", default="3") or 3),
+            retry_delay=float(_get_env_value("BROWSER_RETRY_DELAY", default="2.0") or 2.0),
+            rate_limit_delay=float(_get_env_value("BROWSER_RATE_LIMIT_DELAY", default="1.0") or 1.0),
+            max_content_length=int(_get_env_value("BROWSER_MAX_CONTENT_LENGTH", default="100000") or 100000),
+            extract_images=_parse_bool(_get_env_value("BROWSER_EXTRACT_IMAGES"), False),
+            extract_links=_parse_bool(_get_env_value("BROWSER_EXTRACT_LINKS"), True),
+            cache_enabled=_parse_bool(_get_env_value("BROWSER_CACHE_ENABLED"), False),
+            cache_ttl=int(_get_env_value("BROWSER_CACHE_TTL", default="3600") or 3600),
+        )
+
+
+@dataclass
 class OpenAIConfig:
     """Configuration for OpenAI client wrapper with separate chat and embedding APIs."""
     

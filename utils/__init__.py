@@ -1,6 +1,6 @@
 # This file makes the utils directory a package.
 
-from .config_manager import get_agent_config, get_config_manager, get_registry_bootstrap, reload_config, get_agent_answer_verbose
+from .config_manager import get_agent_config, get_config_manager, get_registry_bootstrap, reload_config, get_agent_answer_verbose, get_browser_tool_config
 from .config_validator import ConfigValidator, ConfigValidationError
 from .observability import (
     RUN_ID,
@@ -22,6 +22,7 @@ from .openai_client import (
     OpenAIConfig,
     ChatAPIConfig,
     EmbeddingAPIConfig,
+    BrowserToolConfig,
     ProviderType,
     OpenAIError,
     ChatMessage,
@@ -34,6 +35,7 @@ __all__ = [
     'get_registry_bootstrap',
     'reload_config',
     'get_agent_answer_verbose',
+    'get_browser_tool_config',
 
     # Config validator exports
     'ConfigValidator',
@@ -59,6 +61,7 @@ __all__ = [
     'OpenAIConfig',
     'ChatAPIConfig',
     'EmbeddingAPIConfig',
+    'BrowserToolConfig',
     'ProviderType',
     'OpenAIError',
     'ChatMessage',

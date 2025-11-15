@@ -16,6 +16,11 @@ install: $(VENV_BIN)/python
     $(PIP) install --upgrade pip
     $(PIP) install -r requirements.txt
 
+setup-playwright: install
+    @echo "Installing Playwright browsers (optional for browser tool)..."
+    -$(VENV_BIN)/playwright install chromium
+    @echo "Playwright setup complete (or skipped if not available)"
+
 run-network: install
     $(VENV_BIN)/openagents network http --config config.yaml
 

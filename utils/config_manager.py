@@ -16,7 +16,7 @@ import yaml
 from loguru import logger
 
 from .config_validator import ConfigValidator, ConfigValidationError
-from .openai_client import ChatAPIConfig, EmbeddingAPIConfig, OpenAIConfig, ProviderType
+from .openai_client import ChatAPIConfig, EmbeddingAPIConfig, OpenAIConfig, ProviderType, BrowserToolConfig
 
 
 class ConfigManager:
@@ -33,6 +33,7 @@ class ConfigManager:
         self.config_path = config_path or "config.yaml"
         self._yaml_config: Optional[Dict[str, Any]] = None
         self._agent_configs: Dict[str, OpenAIConfig] = {}
+        self._browser_tool_configs: Dict[str, BrowserToolConfig] = {}
     
     def _load_yaml_config(self) -> Dict[str, Any]:
         """Load YAML configuration from file."""
@@ -431,6 +432,78 @@ class ConfigManager:
         # Return verbose setting if specified, default to False (concise)
         return agent_override.get('answer_verbose', False)
     
+    def get_browser_tool_config(self, agent_name: str = "default") -> BrowserToolConfig:
+        """Get browser tool configuration for a specific agent with overrides.
+        
+        Parameters
+        ----------
+        agent_name:
+            Name of the agent (e.g., "coordination", "python_expert")
+            
+        Returns
+        -------
+        BrowserToolConfig
+            Configuration with agent-specific overrides applied.
+        """
+        if agent_name in self._browser_tool_configs:
+            return self._browser_tool_configs[agent_name]
+        
+        # Start with environment-based configuration
+        config = BrowserToolConfig.from_env()
+        
+        # Load YAML configuration
+        yaml_config = self._load_yaml_config()
+        api_config = yaml_config.get('api_config', {})
+        
+        # Apply global browser_tool settings from YAML if no env override
+        browser_tool_settings = api_config.get('browser_tool', {})
+        if browser_tool_settings and isinstance(browser_tool_settings, dict):
+            # Helper to check if env var is set
+            def _has_env(var_name: str) -> bool:
+                value = os.getenv(var_name)
+                return value is not None and value.strip() != ""
+            
+            # Apply YAML settings only if corresponding env var is not set
+            if not _has_env("BROWSER_TOOL_ENABLED"):
+                config.enabled = browser_tool_settings.get('enabled', config.enabled)
+            if not _has_env("BROWSER_SEARCH_PROVIDER"):
+                config.search_provider = browser_tool_settings.get('search_provider', config.search_provider)
+            if not _has_env("BROWSER_SEARCH_API_KEY") and not _has_env("TAVILY_API_KEY"):
+                config.search_api_key = browser_tool_settings.get('search_api_key', config.search_api_key)
+            if not _has_env("BROWSER_SEARCH_BASE_URL"):
+                config.search_api_base_url = browser_tool_settings.get('search_api_base_url', config.search_api_base_url)
+            if not _has_env("BROWSER_FALLBACK_PROVIDER"):
+                config.fallback_provider = browser_tool_settings.get('fallback_provider', config.fallback_provider)
+            if not _has_env("BROWSER_ENGINE"):
+                config.browser_engine = browser_tool_settings.get('browser_engine', config.browser_engine)
+            if not _has_env("BROWSER_HEADLESS"):
+                config.headless = browser_tool_settings.get('headless', config.headless)
+            if not _has_env("BROWSER_SEARCH_TIMEOUT"):
+                config.search_timeout = browser_tool_settings.get('search_timeout', config.search_timeout)
+            if not _has_env("BROWSER_NAVIGATION_TIMEOUT"):
+                config.navigation_timeout = browser_tool_settings.get('navigation_timeout', config.navigation_timeout)
+            if not _has_env("BROWSER_MAX_RETRIES"):
+                config.max_retries = browser_tool_settings.get('max_retries', config.max_retries)
+        
+        # Check for agent-specific overrides
+        agent_overrides = api_config.get('agent_overrides', {})
+        agent_override = agent_overrides.get(agent_name, {})
+        
+        if agent_override and isinstance(agent_override, dict):
+            browser_override = agent_override.get('browser_tool', {})
+            if browser_override and isinstance(browser_override, dict):
+                # Apply agent-specific browser tool overrides
+                for key, value in browser_override.items():
+                    if hasattr(config, key) and value is not None:
+                        setattr(config, key, value)
+                        logger.debug(
+                            f"Applied browser_tool override for {agent_name}: {key}={value}"
+                        )
+        
+        # Cache the config
+        self._browser_tool_configs[agent_name] = config
+        return config
+    
     def get_registry_bootstrap(self) -> Dict[str, Dict[str, Any]]:
         """Return registry bootstrap definitions from configuration.
         
@@ -562,6 +635,7 @@ class ConfigManager:
         """Reload configuration from file and clear cache."""
         self._yaml_config = None
         self._agent_configs.clear()
+        self._browser_tool_configs.clear()
         logger.info("Configuration reloaded")
 
 
@@ -618,6 +692,22 @@ def get_agent_answer_verbose(agent_name: str) -> bool:
 def get_registry_bootstrap() -> Dict[str, Dict[str, Any]]:
     """Return registry bootstrap definitions using the global manager."""
     return get_config_manager().get_registry_bootstrap()
+
+
+def get_browser_tool_config(agent_name: str = "default") -> BrowserToolConfig:
+    """Get browser tool configuration for a specific agent.
+    
+    Parameters
+    ----------
+    agent_name:
+        Name of the agent.
+        
+    Returns
+    -------
+    BrowserToolConfig
+        Configuration with agent-specific overrides applied.
+    """
+    return get_config_manager().get_browser_tool_config(agent_name)
 
 
 def reload_config():

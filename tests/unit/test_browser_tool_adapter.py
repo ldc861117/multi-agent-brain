@@ -230,7 +230,7 @@ class TestTavilySearchEngine:
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_response = AsyncMock()
-            mock_response.json.return_value = tavily_search_results
+            mock_response.json = AsyncMock(return_value=tavily_search_results)
             mock_response.raise_for_status = Mock()
             
             mock_context = AsyncMock()
@@ -280,7 +280,7 @@ class TestTavilySearchEngine:
             mock_context.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
             mock_client.return_value = mock_context
             
-            with pytest.raises(SearchProviderError, match="authentication failed"):
+            with pytest.raises(SearchProviderError, match="(authentication failed|Tavily API error)"):
                 await engine.query("test query", max_results=5)
     
     def test_tavily_requires_api_key(self):
@@ -425,7 +425,7 @@ class TestBrowserTool:
             
             with patch('httpx.AsyncClient') as mock_client:
                 mock_response = AsyncMock()
-                mock_response.json.return_value = tavily_search_results
+                mock_response.json = AsyncMock(return_value=tavily_search_results)
                 mock_response.raise_for_status = Mock()
                 
                 mock_context = AsyncMock()

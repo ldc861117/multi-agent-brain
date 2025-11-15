@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Optional, Protocol, Sequence, Union, runtime_checkable
 
 from agents.types import AgentCapabilities, CapabilityDescriptor, ExpertKind, Layer, ToolDescriptor
+from utils import get_browser_tool_config
 
 AgentMessage = Union[Mapping[str, Any], Any]
 ConversationState = Optional[MutableMapping[str, Any]]
@@ -92,6 +93,11 @@ class BaseAgent(BaseAgentProtocol):
     layer: Layer = Layer.UNKNOWN
     expert_kind: ExpertKind = ExpertKind.UNKNOWN
     capabilities: AgentCapabilities = AgentCapabilities()
+    
+    def __init__(self) -> None:
+        """Initialize base agent with lazy-loaded tools."""
+        super().__init__()
+        self._browser_tool: Optional[Any] = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:  # pragma: no cover - exercised indirectly
         super().__init_subclass__(**kwargs)
@@ -181,9 +187,60 @@ class BaseAgent(BaseAgentProtocol):
         }
 
     def tools(self) -> Sequence[ToolDescriptor]:
-        """Fallback to an empty toolset."""
-
-        return ()
+        """Return available tools including browser tool if enabled."""
+        browser_config = get_browser_tool_config(getattr(self, 'name', 'base'))
+        
+        tools_list = []
+        
+        if browser_config.enabled:
+            browser_tool_desc = ToolDescriptor(
+                name="browser_tool",
+                description=(
+                    "Search the web and navigate pages to gather external information. "
+                    "Supports web search via multiple providers and content extraction."
+                ),
+                returns="BrowserResult",
+                parameters={
+                    "action": {
+                        "type": "string",
+                        "enum": ["search", "search_and_visit", "visit"],
+                        "description": "Action to perform: 'search' for web search only, "
+                                     "'search_and_visit' to search and visit top results, "
+                                     "'visit' to navigate to a specific URL"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Search query or URL to visit",
+                        "required": True
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of search results to return",
+                        "default": 5
+                    },
+                    "visit_top_n": {
+                        "type": "integer",
+                        "description": "Number of top search results to visit (for search_and_visit)",
+                        "default": 2
+                    }
+                }
+            )
+            tools_list.append(browser_tool_desc)
+        
+        return tuple(tools_list)
+    
+    def _get_browser_tool(self) -> Any:
+        """Lazy initialization of browser tool.
+        
+        Returns
+        -------
+        BrowserTool
+            Browser tool instance configured for this agent
+        """
+        if self._browser_tool is None:
+            from tools.browser_tool import BrowserTool
+            self._browser_tool = BrowserTool(agent_name=getattr(self, 'name', 'base'))
+        return self._browser_tool
 
     def _coerce_agent_response(self, payload: Any) -> AgentResponse:
         if isinstance(payload, AgentResponse):

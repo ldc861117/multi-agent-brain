@@ -128,6 +128,19 @@ api_config:
     retry_delay: 1.0
     max_retry_delay: 60.0
 
+  browser_tool:
+    enabled: true
+    search_provider: "tavily"  # Primary provider: "tavily", "duckduckgo", "bing", "google"
+    search_api_key: null  # Set via BROWSER_SEARCH_API_KEY or TAVILY_API_KEY env var
+    fallback_provider: "duckduckgo"  # Fallback when primary fails
+    browser_engine: "playwright"  # "playwright" or "none" to disable navigation
+    headless: true
+    search_timeout: 10
+    navigation_timeout: 30
+    max_retries: 3
+    auto_browse_enabled: true  # Enable automatic browsing heuristics in CoordinationAgent
+    persist_results: false  # Default: don't auto-persist to SharedMemory (explicit opt-in)
+
   agent_overrides:
     coordination:
       chat_model: "gemini-2.5-flash"

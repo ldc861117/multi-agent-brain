@@ -26,6 +26,7 @@ from utils import (
     correlation_context,
     get_agent_answer_verbose,
     get_agent_config,
+    get_browser_tool_config,
     get_correlation_id,
     metrics_registry,
 )
@@ -180,8 +181,14 @@ class CoordinationAgent(BaseAgent):
 
         # Cache for active collaboration tasks
         self.active_collaborations: Dict[str, Dict[str, Any]] = {}
+        
+        # Get browser tool configuration
+        self.browser_config = get_browser_tool_config(self.name)
 
-        self.logger.info("CoordinationAgent initialized", extra={"verbose": self.verbose})
+        self.logger.info("CoordinationAgent initialized", extra={
+            "verbose": self.verbose,
+            "browser_tool_enabled": self.browser_config.enabled
+        })
 
     @staticmethod
     def _normalize_expert_label(label: Any) -> Optional[str]:
@@ -611,6 +618,224 @@ Guidelines:
         except Exception as e:
             self.logger.error(f"Failed to retrieve knowledge: {e}")
             return []
+    
+    def _should_use_browser_tool(self, question: str, analysis: Dict[str, Any]) -> bool:
+        """Determine if browser tool should be used for this question.
+        
+        Parameters
+        ----------
+        question : str
+            The user's question
+        analysis : Dict[str, Any]
+            Question analysis results
+            
+        Returns
+        -------
+        bool
+            True if browser tool should be used
+        """
+        if not self.browser_config.enabled:
+            return False
+        
+        # Check if auto_browse_enabled (custom config flag)
+        auto_browse = getattr(self.browser_config, 'auto_browse_enabled', True)
+        if not auto_browse:
+            return False
+        
+        # Heuristics for when to use browser tool
+        question_lower = question.lower()
+        
+        # External info indicators
+        external_indicators = [
+            "latest", "recent", "current", "new", "update", "release",
+            "documentation", "tutorial", "example", "guide",
+            "official", "website", "article", "blog",
+            "what is", "how to", "best practice",
+        ]
+        
+        # Check if question contains external info indicators
+        has_external_indicator = any(indicator in question_lower for indicator in external_indicators)
+        
+        # Check for URLs in question
+        has_url = "http://" in question_lower or "https://" in question_lower
+        
+        # Complexity check - simple questions might benefit from external info
+        complexity = analysis.get("complexity", "simple")
+        is_simple_or_medium = complexity in ("simple", "medium")
+        
+        should_browse = (has_external_indicator or has_url) and is_simple_or_medium
+        
+        if should_browse:
+            self.logger.info(
+                "Browser tool triggered by heuristics",
+                extra={
+                    "question": question[:100],
+                    "has_external_indicator": has_external_indicator,
+                    "has_url": has_url,
+                    "complexity": complexity
+                }
+            )
+        
+        return should_browse
+    
+    async def _search_web(
+        self,
+        query: str,
+        max_results: int = 5,
+        visit_top_n: int = 0
+    ) -> Optional[Dict[str, Any]]:
+        """Search the web using browser tool.
+        
+        Parameters
+        ----------
+        query : str
+            Search query
+        max_results : int
+            Maximum number of search results
+        visit_top_n : int
+            Number of top results to visit (0 to skip navigation)
+            
+        Returns
+        -------
+        Optional[Dict[str, Any]]
+            Browser result as dict, or None if failed
+        """
+        try:
+            browser_tool = self._get_browser_tool()
+            
+            if visit_top_n > 0:
+                result = await browser_tool.search_and_visit(
+                    query=query,
+                    max_results=max_results,
+                    visit_top_n=visit_top_n
+                )
+            else:
+                result = await browser_tool.search(
+                    query=query,
+                    max_results=max_results
+                )
+            
+            # Convert to dict for serialization
+            result_dict = {
+                "query": result.query,
+                "search_results": [
+                    {
+                        "title": sr.title,
+                        "url": sr.url,
+                        "snippet": sr.snippet,
+                        "score": sr.score
+                    }
+                    for sr in result.search_results
+                ],
+                "visited_pages": [
+                    {
+                        "url": page.url,
+                        "title": page.title,
+                        "text": page.text[:1000]  # Truncate for metadata
+                    }
+                    for page in result.visited_pages
+                ],
+                "answer": result.answer,
+                "error": result.error
+            }
+            
+            self.logger.info(
+                "Web search completed",
+                extra={
+                    "query": query,
+                    "results_count": len(result.search_results),
+                    "pages_visited": len(result.visited_pages),
+                    "has_error": result.error is not None
+                }
+            )
+            
+            return result_dict
+            
+        except Exception as e:
+            self.logger.error(
+                f"Web search failed: {e}",
+                extra={"query": query}
+            )
+            return None
+    
+    def _should_persist_browser_results(
+        self,
+        question: str,
+        browser_result: Optional[Dict[str, Any]]
+    ) -> bool:
+        """Determine if browser results should be persisted to SharedMemory.
+        
+        Parameters
+        ----------
+        question : str
+            User's question
+        browser_result : Optional[Dict[str, Any]]
+            Browser search result
+            
+        Returns
+        -------
+        bool
+            True if results should be persisted
+        """
+        if not browser_result or browser_result.get("error"):
+            return False
+        
+        # Check config flag
+        persist_default = getattr(self.browser_config, 'persist_results', False)
+        
+        # Only persist if explicitly enabled or if we have valuable content
+        has_valuable_content = (
+            len(browser_result.get("visited_pages", [])) > 0 or
+            browser_result.get("answer") is not None
+        )
+        
+        return persist_default and has_valuable_content
+    
+    async def _persist_browser_results(
+        self,
+        browser_result: Dict[str, Any],
+        tenant_id: str = "default"
+    ) -> None:
+        """Persist browser results to SharedMemory.
+        
+        Parameters
+        ----------
+        browser_result : Dict[str, Any]
+            Browser search result to persist
+        tenant_id : str
+            Tenant ID for multi-tenant isolation
+        """
+        try:
+            # Store visited pages as knowledge
+            for page in browser_result.get("visited_pages", []):
+                self.memory.store_knowledge(
+                    collection="web_snapshots",
+                    tenant_id=tenant_id,
+                    content={
+                        "url": page["url"],
+                        "title": page["title"],
+                        "text": page["text"],
+                        "query": browser_result["query"]
+                    },
+                    metadata={
+                        "source": "browser_tool",
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+            
+            self.logger.info(
+                "Browser results persisted",
+                extra={
+                    "pages_stored": len(browser_result.get("visited_pages", [])),
+                    "tenant_id": tenant_id
+                }
+            )
+            
+        except Exception as e:
+            self.logger.error(
+                f"Failed to persist browser results: {e}",
+                extra={"query": browser_result.get("query")}
+            )
 
     async def dispatch_to_experts(
         self,
@@ -1143,6 +1368,19 @@ Direct Answer:
                 similar_knowledge = await self.retrieve_similar_knowledge(
                     question, tenant_id
                 )
+                
+                # Check if browser tool should be used
+                browser_result = None
+                if self._should_use_browser_tool(question, analysis):
+                    browser_result = await self._search_web(
+                        query=question,
+                        max_results=5,
+                        visit_top_n=0  # Only search, don't visit pages by default
+                    )
+                    
+                    # Optionally persist browser results
+                    if browser_result and self._should_persist_browser_results(question, browser_result):
+                        await self._persist_browser_results(browser_result, tenant_id)
 
                 dispatch_result = await self.dispatch_to_experts(
                     question, analysis, similar_knowledge, tenant_id
@@ -1188,17 +1426,30 @@ Direct Answer:
 
                 latency = time.perf_counter() - request_start
                 metrics_registry.record_request(self.name, "success", latency)
+                
+                # Build response metadata with browser tool info
+                response_metadata = {
+                    "channel": self.name,
+                    "interaction_id": dispatch_result["interaction_id"],
+                    "complexity": analysis.get("complexity"),
+                    "experts_involved": analysis.get("required_experts"),
+                    "knowledge_used": len(similar_knowledge) > 0,
+                    "correlation_id": dispatch_result.get("correlation_id", correlation_id),
+                }
+                
+                # Add browser tool metadata if used
+                if browser_result:
+                    response_metadata["browser_tool_used"] = True
+                    response_metadata["web_search_query"] = browser_result.get("query")
+                    response_metadata["web_results_count"] = len(browser_result.get("search_results", []))
+                    # Include URLs visited (for audit/transparency)
+                    urls_visited = [page["url"] for page in browser_result.get("visited_pages", [])]
+                    if urls_visited:
+                        response_metadata["urls_visited"] = urls_visited
 
                 return AgentResponse(
                     content=final_answer,
-                    metadata={
-                        "channel": self.name,
-                        "interaction_id": dispatch_result["interaction_id"],
-                        "complexity": analysis.get("complexity"),
-                        "experts_involved": analysis.get("required_experts"),
-                        "knowledge_used": len(similar_knowledge) > 0,
-                        "correlation_id": dispatch_result.get("correlation_id", correlation_id),
-                    },
+                    metadata=response_metadata,
                 )
 
             except Exception as e:

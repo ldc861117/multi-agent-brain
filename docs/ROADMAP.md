@@ -64,12 +64,13 @@
 ### H3 · Productization (Extensibility & packaging)
 
 1. **Milestone: Plugin/tooling gallery for experts**
-   - **Intent**: Showcase and manage auxiliary tools available to specialist agents (e.g., Python execution, Milvus diagnostics) with hot-reloadable prompts/configs.
+   - **Intent**: Showcase and manage auxiliary tools available to specialist agents (e.g., Python execution, Milvus diagnostics, browser/web search) with hot-reloadable prompts/configs.
    - **Acceptance slices**:
      1. Define plugin manifest format (YAML/JSON) referencing runtime adapters already supported by agent scaffolds.
      2. Implement hot-reload mechanism (config reload or message-driven) that updates prompts/config without restart, guarded by existing tests.
      3. Provide dashboard/gallery section enumerating available tools, per-agent compatibility, and activation status.
-   - **Success metrics**: Plugin add/remove cycle completes in <2 minutes without process restart; prompts reload without breaking ongoing sessions; documentation contains at least three curated tool examples.
+     4. **Browser Tool Integration**: Implement web search and browsing capabilities following the design in `docs/design/browser_tool.md` (Tavily API primary, DuckDuckGo fallback, Playwright navigation, explicit memory opt-in).
+   - **Success metrics**: Plugin add/remove cycle completes in <2 minutes without process restart; prompts reload without breaking ongoing sessions; documentation contains at least three curated tool examples; browser tool achieves <5s search latency (p95).
 
 2. **Milestone: Scenario-based demos with UI affordances**
    - **Intent**: Offer scripted walkthroughs (data retrieval, code analysis, DevOps triage) that highlight UI/UX flows and multi-agent collaboration.
@@ -98,6 +99,7 @@
 | **UI technology** | Text-first TUI, lightweight web app (FastAPI + HTMX), or static telemetry viewer | Select in H2 dashboard slice. Preference for minimal web UI if dependency overhead remains low; otherwise start with TUI for quicker iteration. |
 | **Metrics backend** | In-memory counters, Prometheus exporter, or SaaS APM | H2 observability slices begin with in-process metrics; upgrade path outlined in docs if Prometheus adoption is approved. |
 | **Plugin distribution** | Local filesystem manifests vs. remote registry | Decide ahead of H3 plugin gallery; default to repository-managed manifests for simplicity. |
+| **Search provider** | Tavily (recommended) vs. Bing, Google CSE, SearXNG, DuckDuckGo | Default to Tavily API for LLM-optimized results with DuckDuckGo as zero-config fallback. Design documented in `docs/design/browser_tool.md`. Decision finalized for H3 plugin milestone. |
 
 ## Risks & Mitigations
 

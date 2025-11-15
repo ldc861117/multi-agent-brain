@@ -129,7 +129,7 @@ async def test_base_agent_get_browser_tool_lazy_init(monkeypatch):
     mock_browser_tool_instance = Mock()
     mock_browser_tool_class.return_value = mock_browser_tool_instance
     
-    with patch("agents.base.BrowserTool", mock_browser_tool_class):
+    with patch("tools.browser_tool.BrowserTool", mock_browser_tool_class):
         class TestAgent(BaseAgent):
             name = "test_agent"
             
@@ -481,21 +481,20 @@ async def test_coordination_agent_handle_message_with_browser_tool(monkeypatch):
         lambda **_: mock_memory
     )
     
-    # Mock expert registry and agent loading
+    # Mock expert registry
     monkeypatch.setattr(
         "agents.coordination.agent.get_expert_registry",
         lambda: None  # Use legacy dispatch
     )
     
-    # Mock load_agent to return a mock expert
-    mock_expert = AsyncMock()
-    mock_expert.handle_message = AsyncMock(
-        return_value=AgentResponse("Expert response", {})
-    )
-    monkeypatch.setattr(
-        "agents.coordination.agent.load_agent",
-        lambda _: mock_expert
-    )
+    # Create agent
+    agent = CoordinationAgent()
+    
+    # Mock _get_expert_response to avoid LLM calls
+    async def mock_get_expert_response(expert, task_message):
+        return f"Expert {expert} response"
+    
+    agent._get_expert_response = AsyncMock(side_effect=mock_get_expert_response)
     
     # Mock browser tool
     mock_browser_result = BrowserResult(
@@ -516,8 +515,7 @@ async def test_coordination_agent_handle_message_with_browser_tool(monkeypatch):
     mock_browser_tool = AsyncMock()
     mock_browser_tool.search = AsyncMock(return_value=mock_browser_result)
     
-    # Create agent and inject browser tool
-    agent = CoordinationAgent()
+    # Inject browser tool
     agent._browser_tool = mock_browser_tool
     
     # Test with question that should trigger browser tool
@@ -588,17 +586,13 @@ async def test_coordination_agent_handle_message_without_browser_tool(monkeypatc
         lambda: None
     )
     
-    # Mock load_agent
-    mock_expert = AsyncMock()
-    mock_expert.handle_message = AsyncMock(
-        return_value=AgentResponse("Expert response", {})
-    )
-    monkeypatch.setattr(
-        "agents.coordination.agent.load_agent",
-        lambda _: mock_expert
-    )
-    
     agent = CoordinationAgent()
+    
+    # Mock _get_expert_response to avoid LLM calls
+    async def mock_get_expert_response(expert, task_message):
+        return f"Expert {expert} response"
+    
+    agent._get_expert_response = AsyncMock(side_effect=mock_get_expert_response)
     
     message = {
         "text": "How do I use async in Python?",
@@ -663,21 +657,18 @@ async def test_browser_tool_error_does_not_break_flow(monkeypatch):
         lambda: None
     )
     
-    # Mock load_agent
-    mock_expert = AsyncMock()
-    mock_expert.handle_message = AsyncMock(
-        return_value=AgentResponse("Expert response", {})
-    )
-    monkeypatch.setattr(
-        "agents.coordination.agent.load_agent",
-        lambda _: mock_expert
-    )
+    agent = CoordinationAgent()
+    
+    # Mock _get_expert_response to avoid LLM calls
+    async def mock_get_expert_response(expert, task_message):
+        return f"Expert {expert} response"
+    
+    agent._get_expert_response = AsyncMock(side_effect=mock_get_expert_response)
     
     # Mock browser tool that fails
     mock_browser_tool = AsyncMock()
     mock_browser_tool.search = AsyncMock(side_effect=Exception("Browser error"))
     
-    agent = CoordinationAgent()
     agent._browser_tool = mock_browser_tool
     
     message = {

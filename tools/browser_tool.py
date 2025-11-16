@@ -468,14 +468,27 @@ class BrowserTool:
         """
         self.agent_name = agent_name
         self.config = get_browser_tool_config(agent_name)
-        self.search_engine = create_search_engine(self.config.search_provider, self.config)
+        
+        # Try to create primary search engine, fall back to fallback provider if it fails
+        try:
+            self.search_engine = create_search_engine(self.config.search_provider, self.config)
+            logger.info(
+                f"BrowserTool initialized for agent '{agent_name}' "
+                f"with provider '{self.config.search_provider}'"
+            )
+        except SearchProviderError as e:
+            logger.warning(
+                f"Failed to initialize primary search provider '{self.config.search_provider}': {e}. "
+                f"Falling back to '{self.config.fallback_provider}'"
+            )
+            self.search_engine = create_search_engine(self.config.fallback_provider, self.config)
+            logger.info(
+                f"BrowserTool initialized for agent '{agent_name}' "
+                f"with fallback provider '{self.config.fallback_provider}'"
+            )
+        
         self.navigator: Optional[PageNavigator] = None
         self.parser = ContentParser(self.config)
-        
-        logger.info(
-            f"BrowserTool initialized for agent '{agent_name}' "
-            f"with provider '{self.config.search_provider}'"
-        )
     
     def _get_navigator(self) -> PageNavigator:
         """Lazy initialization of page navigator."""

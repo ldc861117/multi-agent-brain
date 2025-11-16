@@ -60,14 +60,14 @@ class ExpertKind(str, Enum):
     SUPPORT = "support"
     UNKNOWN = "unknown"
 
-    _ALIASES: Mapping[str, "ExpertKind"] = MappingProxyType(
+    _ALIASES: Mapping[str, str] = MappingProxyType(
         {
-            "python": PYTHON_EXPERT,
-            "milvus": MILVUS_EXPERT,
-            "devops": DEVOPS_EXPERT,
-            "router": COORDINATION,
-            "entry": GENERAL,
-            "gateway": GENERAL,
+            "python": "python_expert",
+            "milvus": "milvus_expert",
+            "devops": "devops_expert",
+            "router": "coordination",
+            "entry": "general",
+            "gateway": "general",
         }
     )
 
@@ -81,7 +81,11 @@ class ExpertKind(str, Enum):
             return cls.UNKNOWN
         normalised = str(value).strip().lower()
         if normalised in cls._ALIASES:
-            return cls._ALIASES[normalised]
+            target_value = cls._ALIASES[normalised]
+            for member in cls:
+                if member.value == target_value:
+                    return member
+            return cls.UNKNOWN
         for member in cls:
             if member.value == normalised:
                 return member

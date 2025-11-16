@@ -179,7 +179,7 @@ async def main():
     print("=" * 50)
     
     # Check for API key
-    api_key = os.environ.get("BROWSER_SEARCH_API_KEY")
+    api_key = os.environ.get("BROWSER_SEARCH_API_KEY") or os.environ.get("TAVILY_API_KEY")
     if api_key:
         print(f"✓ Tavily API key configured (starts with {api_key[:8]}...)")
     else:
@@ -197,7 +197,9 @@ async def main():
         try:
             await demo()
         except Exception as e:
-            print(f"Demo failed: {e}")
+            print(f"\n✗ Demo {demo.__name__} failed: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
     
     print("\n" + "=" * 50)
     print("Demo suite complete")

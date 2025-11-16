@@ -14,9 +14,14 @@ from typing import Any, Dict, Optional
 
 import yaml
 from loguru import logger
+from dotenv import load_dotenv
 
 from .config_validator import ConfigValidator, ConfigValidationError
 from .openai_client import ChatAPIConfig, EmbeddingAPIConfig, OpenAIConfig, ProviderType, BrowserToolConfig
+
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class ConfigManager:
